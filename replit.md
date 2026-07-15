@@ -1,45 +1,59 @@
-# [Project name]
+# IELTS Speaking Partner
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+An AI-powered IELTS speaking practice app. Students speak into the mic, an AI examiner (Gemini) replies with follow-up questions, and the app provides real-time band scores, grammar corrections, and vocabulary upgrade suggestions after each turn.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
+- `pnpm --filter @workspace/ielts-speaking-partner run dev` — run the frontend (port 21155)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
+- Frontend: React 19 + Vite + Tailwind CSS v4 + Wouter routing
 - API: Express 5
-- DB: PostgreSQL + Drizzle ORM
+- AI: Google Gemini (`@google/genai`) via `GEMINI_API_KEY`
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- PWA: vite-plugin-pwa (installable, offline-capable)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `lib/api-spec/openapi.yaml` — single source of truth for all API contracts
+- `lib/api-zod/` — generated Zod schemas (used by server for validation)
+- `lib/api-client-react/` — generated React Query hooks (used by frontend)
+- `artifacts/api-server/src/lib/gemini.ts` — Gemini client + IELTS examiner system prompt
+- `artifacts/api-server/src/routes/gemini/` — chat endpoint
+- `artifacts/ielts-speaking-partner/src/hooks/use-ielts-conversation.ts` — core voice conversation state machine
+- `artifacts/ielts-speaking-partner/src/lib/mock-test-bank.ts` — IELTS mock test cue cards
+- `artifacts/ielts-speaking-partner/src/lib/free-practice-topics.ts` — topic list for free practice mode
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Gemini structured JSON output (`responseMimeType: "application/json"`) for reliable band score + correction parsing
+- `thinkingBudget: 0` on Gemini to minimize latency for real-time conversation
+- Speech recognition uses Web Speech API (browser-native, no third-party service)
+- TTS uses `window.speechSynthesis` (browser-native)
+- PWA-enabled so users can install to homescreen
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Two modes:
+1. **Free Practice** — pick a topic (Hometown, Technology, etc.) or open-ended; speak freely with the AI examiner
+2. **Mock Test** — full IELTS Part 1 / Part 2 / Part 3 flow with timed cue card and stage transitions
+
+After each student turn, the app shows: band scores (fluency, lexical resource, grammar, pronunciation), a grammar correction, a band upgrade rephrasing, and 1–2 vocabulary upgrades.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+_Populated as the project evolves._
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- `GEMINI_API_KEY` must be set — the API server throws at startup without it
+- `gemini.ts` uses `gemini-flash-lite-latest` model with `thinkingBudget: 0` for low latency
+- Browser Speech Recognition requires HTTPS or localhost — won't work on plain HTTP
+- Vite proxy in dev mode forwards `/api` → `http://localhost:8080`
