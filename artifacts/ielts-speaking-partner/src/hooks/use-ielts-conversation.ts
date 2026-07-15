@@ -69,7 +69,26 @@ export function useIeltsConversation() {
   // instead of a duplicate append.
   const finalResultsRef = useRef<string[]>([]);
   const isListeningRef = useRef(false);
+  // Set to true only when the USER explicitly taps the stop button (or a
+  // mock-test timer expires). Stays false when the browser auto-stops
+  // continuous recognition after a brief silence. onend checks this flag
+  // to decide whether to restart (browser stop) or submit (user stop).
+  const userStoppedRef = useRef(false);
+
   const sendGeminiChatMessage = useSendGeminiChatMessage();
+
+  // Keep a live ref to the latest sendGeminiChatMessage so the onend
+  // closure (set once in useEffect) always calls the up-to-date mutation.
+  const sendGeminiChatMessageRef = useRef(sendGeminiChatMessage);
+  sendGeminiChatMessageRef.current = sendGeminiChatMessage;
+
+  // Keep a live ref to the latest freePracticeTopic for the same reason.
+  const freePracticeTopicRef = useRef(freePracticeTopic);
+  freePracticeTopicRef.current = freePracticeTopic;
+
+  // Keep a live ref to the latest messages for setMessages-in-mutate calls.
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   // --- Audio recording (self-playback) ---------------------------------
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -123,9 +142,10 @@ export function useIeltsConversation() {
       recognition.onerror = (event: any) => {
         if (event.error === 'not-allowed') {
           isListeningRef.current = false;
+          userStoppedRef.current = false;
           finalResultsRef.current = [];
           discardAudioRecording();
-          setError('Microphone access was denied. Please allow it or use text input.');
+          setError('Microphone access was denied. Please allow it in your browser settings and reload the page.');
           setState('idle');
         } else if (event.error === 'audio-capture') {
           // audio-capture is a transient OS-level failure (screen lock, another
@@ -135,6 +155,7 @@ export function useIeltsConversation() {
           // MediaStream after 1 s (gives the OS time to free the hardware),
           // and show a non-blocking toast so the user can just tap again.
           isListeningRef.current = false;
+          userStoppedRef.current = false;
           finalResultsRef.current = [];
           discardAudioRecording();
           setState('idle');
@@ -148,18 +169,40 @@ export function useIeltsConversation() {
           );
         } else if (event.error !== 'aborted' && event.error !== 'no-speech') {
           // 'no-speech' and 'aborted' are common during natural pauses in
-          // continuous mode — let onend decide whether to submit whatever
-          // was already captured instead of surfacing a scary error.
+          // continuous mode — let onend decide whether to restart or submit
+          // instead of surfacing a scary error.
           isListeningRef.current = false;
+          userStoppedRef.current = false;
           finalResultsRef.current = [];
           discardAudioRecording();
           setError(`Microphone error: ${event.error}`);
           setState('idle');
         }
+        // For no-speech / aborted: do nothing here — onend will handle it.
       };
 
       recognition.onend = () => {
+        // Ignore if we're not supposed to be listening (e.g. already handled
+        // by an error callback, or recognition was aborted externally).
         if (!isListeningRef.current) return;
+
+        // If the browser auto-stopped continuous recognition (a brief silence
+        // or an internal network hiccup) and the USER has NOT explicitly
+        // tapped "done", restart immediately so the user keeps speaking
+        // without noticing any interruption.
+        if (!userStoppedRef.current) {
+          try {
+            recognition.start();
+            // Resumed — don't submit yet; keep accumulating speech.
+            return;
+          } catch {
+            // Can't restart (e.g. permission revoked mid-session).
+            // Fall through and submit whatever was already captured.
+          }
+        }
+
+        // User explicitly stopped (or restart failed). Submit the transcript.
+        userStoppedRef.current = false;
         isListeningRef.current = false;
         // Join in index order, skipping any empty (non-final/never-set)
         // slots, so the final transcript reflects each spoken segment once.
@@ -167,10 +210,11 @@ export function useIeltsConversation() {
         finalResultsRef.current = [];
         stopAudioRecording().then((audioUrl) => {
           if (transcript) {
-            handleUserMessage(transcript, audioUrl);
+            handleUserMessageViaRef(transcript, audioUrl);
           } else {
             discardAudioUrl(audioUrl);
             setState('idle');
+            toast.info("Didn't catch that — please tap the mic and try again.", { duration: 3000 });
           }
         });
       };
@@ -296,6 +340,9 @@ export function useIeltsConversation() {
     if (recognitionRef.current) recognitionRef.current.abort();
 
     const fillerWords = detectFillerWords(text);
+    // Read topic from ref so this always uses the latest value even when
+    // called from the stale onend closure.
+    const topic = freePracticeTopicRef.current;
 
     setMessages(prev => {
       const newMessages: DisplayMessage[] = [
@@ -311,8 +358,10 @@ export function useIeltsConversation() {
         .map(({ role, content }) => ({ role, content }));
 
       setState('thinking');
-      sendGeminiChatMessage.mutate(
-        { data: { messages: history, topic: freePracticeTopic } },
+      // Use the ref to always call the latest mutation object, not the
+      // stale one captured when the onend closure was first created.
+      sendGeminiChatMessageRef.current.mutate(
+        { data: { messages: history, topic } },
         {
           onSuccess: (res: GeminiChatOutput) => {
             setMessages(current => [
@@ -343,12 +392,22 @@ export function useIeltsConversation() {
     });
   };
 
+  // Stable indirection so that the onend closure (set once in useEffect)
+  // always calls the latest version of handleUserMessage.
+  const handleUserMessageRef = useRef(handleUserMessage);
+  handleUserMessageRef.current = handleUserMessage;
+
+  const handleUserMessageViaRef = (text: string, audioUrl?: string) => {
+    handleUserMessageRef.current(text, audioUrl);
+  };
+
   const startPractice = (selectedMode: ConversationMode = 'practice', topicId?: string) => {
     setError(null);
     setMode(selectedMode);
 
     if (selectedMode === 'mock') {
       setFreePracticeTopic(undefined);
+      freePracticeTopicRef.current = undefined;
       setMockStage('part1');
       setCurrentCueCard(null);
       const openingLine = `${PART1_INTRO} ${PART1_OPENING_QUESTION}`;
@@ -360,6 +419,7 @@ export function useIeltsConversation() {
 
     const topic = getFreePracticeTopic(topicId ?? 'general');
     setFreePracticeTopic(topic.topicForApi);
+    freePracticeTopicRef.current = topic.topicForApi;
     setMockStage(null);
     setCurrentCueCard(null);
     setMessages([{ role: 'assistant', content: topic.openingQuestion }]);
@@ -369,8 +429,10 @@ export function useIeltsConversation() {
 
   const toggleListening = () => {
     if (state === 'listening') {
-      // Manual "done speaking" — stop() lets the recognizer flush its final
-      // result, then onend submits whatever was accumulated.
+      // Mark as user-initiated stop so onend submits instead of restarting.
+      userStoppedRef.current = true;
+      // stop() lets the recognizer flush its final result, then onend
+      // submits whatever was accumulated.
       recognitionRef.current?.stop();
     } else if (state === 'speaking' || state === 'idle') {
       if (state === 'speaking') {
@@ -378,6 +440,7 @@ export function useIeltsConversation() {
       }
       setError(null);
       finalResultsRef.current = [];
+      userStoppedRef.current = false;
       isListeningRef.current = true;
       setState('listening');
       startAudioRecording();
@@ -385,6 +448,8 @@ export function useIeltsConversation() {
         recognitionRef.current?.start();
       } catch (e) {
         isListeningRef.current = false;
+        setState('idle');
+        toast.error('Could not start microphone. Please check your browser permissions.', { duration: 4000 });
       }
     }
   };
@@ -392,6 +457,7 @@ export function useIeltsConversation() {
   const resetConversation = () => {
     window.speechSynthesis.cancel();
     isListeningRef.current = false;
+    userStoppedRef.current = false;
     finalResultsRef.current = [];
     if (recognitionRef.current) recognitionRef.current.abort();
     clearMockTimer();
@@ -402,6 +468,7 @@ export function useIeltsConversation() {
     setMockStage(null);
     setCurrentCueCard(null);
     setFreePracticeTopic(undefined);
+    freePracticeTopicRef.current = undefined;
     setError(null);
   };
 
@@ -455,6 +522,7 @@ export function useIeltsConversation() {
     setMockStage('part2-speaking');
     setError(null);
     finalResultsRef.current = [];
+    userStoppedRef.current = false;
     isListeningRef.current = true;
     setState('listening');
     startAudioRecording();
@@ -462,8 +530,11 @@ export function useIeltsConversation() {
       recognitionRef.current?.start();
     } catch {
       isListeningRef.current = false;
+      setState('idle');
     }
     runCountdown(PART2_SPEAKING_SECONDS, 'Speaking time', () => {
+      // Timer-initiated stop — treat the same as a user stop so onend submits.
+      userStoppedRef.current = true;
       recognitionRef.current?.stop();
     });
   };
