@@ -143,6 +143,45 @@ function parseExaminerResponse(text: string): ExaminerReply {
 }
 
 /**
+ * Transcribes a base64-encoded audio clip using Gemini's audio understanding.
+ * Returns the spoken text, or an empty string if nothing was audible.
+ */
+export async function transcribeAudio(
+  base64Audio: string,
+  mimeType: string,
+): Promise<string> {
+  // Same model alias used for chat — the only one confirmed to have quota
+  // on this API key. Flash Lite supports multimodal (audio) input.
+  const response = await genAI.models.generateContent({
+    model: "gemini-flash-lite-latest",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            inlineData: {
+              data: base64Audio,
+              mimeType,
+            },
+          },
+          {
+            text: "Transcribe the spoken English in this audio clip exactly as heard. Return ONLY the transcribed words — no punctuation changes, no commentary, no quotation marks. If no speech is audible, return an empty string.",
+          },
+        ],
+      },
+    ],
+    config: {
+      maxOutputTokens: 512,
+    },
+  });
+
+  const text = (response.text ?? "").trim();
+  // If Gemini says there's nothing, normalise to empty string
+  if (/^(no speech|nothing|inaudible|silent|empty)/i.test(text)) return "";
+  return text;
+}
+
+/**
  * Sends the full conversation history to Gemini and returns the examiner's
  * next reply as plain text.
  */
