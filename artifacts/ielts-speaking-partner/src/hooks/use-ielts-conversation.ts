@@ -115,26 +115,28 @@ export function useIeltsConversation() {
       // continuous=true stops the browser from auto-ending the session on
       // the first short pause, giving the user ample time to complete full
       // sentences — it now only submits when they explicitly tap "done".
-      recognition.continuous = true;
-      // Interim (in-progress, not-yet-final) results are disabled entirely.
-      // Android Chrome in particular is known to re-fire "final" results for
-      // words it already reported as interim, which produced doubled text
-      // like "hello hello" even though our onresult handler only recorded
-      // isFinal results. Turning interim results off avoids that class of
-      // duplicate finalization altogether.
+      // continuous=false is deliberately chosen over continuous=true.
+      // On Android Chrome (and many mobile browsers), continuous=true starts
+      // and silently stops before capturing any audio, creating an infinite
+      // restart loop that never produces a transcript. With continuous=false
+      // the browser listens for one utterance, fires onresult, then fires
+      // onend — at which point we restart manually (see onend below) to keep
+      // accumulating speech until the user taps "done". This gives the same
+      // "speak as long as you want" UX but with far better mobile reliability.
+      recognition.continuous = false;
       recognition.interimResults = false;
       recognition.lang = 'en-US';
 
       recognition.onresult = (event: any) => {
-        // Only iterate from resultIndex onward (results before it were
-        // already handled by a previous event), but write each final
-        // transcript into its own index slot rather than appending — if
-        // the browser re-emits an index we've already stored, this simply
-        // replaces that slot's text instead of duplicating it.
+        // Each continuous=false session resets resultIndex to 0, so we
+        // cannot use the index as a unique key across restarts. Instead,
+        // push each final result onto the array; duplicates from a single
+        // session are impossible because interimResults=false and the
+        // session ends immediately after the first final result.
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
-          if (result.isFinal) {
-            finalResultsRef.current[i] = result[0].transcript;
+          if (result.isFinal && result[0].transcript.trim()) {
+            finalResultsRef.current.push(result[0].transcript.trim());
           }
         }
       };
