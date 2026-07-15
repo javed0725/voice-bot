@@ -10,7 +10,39 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: gemini
+    description: Gemini AI speaking-practice operations
 paths:
+  /gemini/chat:
+    post:
+      operationId: sendGeminiChatMessage
+      tags: [gemini]
+      summary: Send the conversation history and receive the examiner's next reply
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GeminiChatInput"
+      responses:
+        "200":
+          description: Examiner reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiChatOutput"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
+        "502":
+          description: Upstream Gemini error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeminiError"
   /healthz:
     get:
       operationId: healthCheck
@@ -33,4 +65,106 @@ components:
           type: string
       required:
         - status
+    GeminiChatMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+      required:
+        - role
+        - content
+    GeminiChatInput:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeminiChatMessage"
+        topic:
+          type: string
+          description: >-
+            Optional Free Practice topic (e.g. "Hometown", "Technology"). When
+            present, the examiner must keep every question and follow-up
+            strictly scoped to this topic instead of open-ended conversation.
+      required:
+        - messages
+    GeminiChatOutput:
+      type: object
+      properties:
+        reply:
+          type: string
+          description: The examiner's short conversational reply (speak this aloud).
+        correction:
+          type: string
+          description: >-
+            Correction of any grammar/word-choice mistakes in the student's
+            last message, or confirmation it was correct. Display only, do
+            not speak aloud.
+        bandUpgrade:
+          type: string
+          description: >-
+            A more natural, idiomatic, or higher band-score way to phrase
+            what the student said. Display only, do not speak aloud.
+        bandScores:
+          $ref: "#/components/schemas/BandScoreBreakdown"
+        vocabularyUpgrades:
+          type: array
+          description: >-
+            1-2 simple words the student used, each paired with a Band 7+/8+
+            synonym or idiomatic replacement.
+          items:
+            $ref: "#/components/schemas/VocabularyUpgrade"
+      required:
+        - reply
+        - correction
+        - bandUpgrade
+        - bandScores
+        - vocabularyUpgrades
+    BandScoreBreakdown:
+      type: object
+      description: Estimated IELTS Speaking band scores (0-9) for the student's last utterance.
+      properties:
+        fluency:
+          type: number
+          description: Fluency and Coherence band score (0-9).
+        lexicalResource:
+          type: number
+          description: Lexical Resource band score (0-9).
+        grammaticalRange:
+          type: number
+          description: Grammatical Range and Accuracy band score (0-9).
+        pronunciation:
+          type: number
+          description: Pronunciation band score (0-9).
+        overall:
+          type: number
+          description: Overall band score (0-9), the average of the four criteria.
+      required:
+        - fluency
+        - lexicalResource
+        - grammaticalRange
+        - pronunciation
+        - overall
+    VocabularyUpgrade:
+      type: object
+      properties:
+        original:
+          type: string
+          description: The simple word or phrase the student used.
+        upgrade:
+          type: string
+          description: A Band 7+/8+ synonym or idiomatic expression to replace it.
+      required:
+        - original
+        - upgrade
+    GeminiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
 

@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "IELTS Speaking Partner"
+version = "1.0.0"
+id = "artifacts/ielts-speaking-partner"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21155
+
+[services.development]
+run = "pnpm --filter @workspace/ielts-speaking-partner run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ielts-speaking-partner", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/ielts-speaking-partner/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21155"
+BASE_PATH = "/"
