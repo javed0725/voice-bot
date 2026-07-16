@@ -39,6 +39,20 @@ export interface MockTimerInfo {
 // Gemini-based audio transcription
 // ---------------------------------------------------------------------------
 
+// Strip codec parameters before sending to Gemini.
+// e.g. "audio/webm;codecs=opus" → "audio/webm"
+// Gemini only accepts the base MIME type without parameters.
+function normaliseAudioMime(raw: string): string {
+  const base = raw.split(';')[0].trim().toLowerCase();
+  // Map any ogg variant to audio/ogg (Gemini-accepted)
+  if (base === 'audio/ogg') return 'audio/ogg';
+  if (base === 'audio/webm') return 'audio/webm';
+  if (base === 'audio/mp4' || base === 'audio/x-m4a') return 'audio/mp4';
+  if (base === 'audio/wav' || base === 'audio/wave') return 'audio/wav';
+  // Return base as-is for anything else (aac, flac, mp3…)
+  return base;
+}
+
 async function transcribeWithGemini(blob: Blob): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -46,21 +60,46 @@ async function transcribeWithGemini(blob: Blob): Promise<string> {
       try {
         const dataUrl = reader.result as string;
         // dataUrl = "data:<mime>;base64,<data>"
-        const [meta, base64] = dataUrl.split(',');
-        const mimeType = meta.replace('data:', '').replace(';base64', '');
-        const res = await fetch('/api/transcribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audio: base64, mimeType }),
-        });
+        // Split only on the first comma — base64 payload never contains commas.
+        const commaIdx = dataUrl.indexOf(',');
+        if (commaIdx === -1) { reject(new Error('FileReader returned invalid data URL')); return; }
+        const meta   = dataUrl.slice(0, commaIdx);          // "data:audio/webm;codecs=opus;base64"
+        const base64 = dataUrl.slice(commaIdx + 1);         // actual base64 payload
+        const rawMime = meta.replace('data:', '').replace(/;base64$/, '');
+        const mimeType = normaliseAudioMime(rawMime);
+
+        console.debug(`[transcribe] blob size=${blob.size}B rawMime=${rawMime} → geminiMime=${mimeType}`);
+
+        // 58-second client-side deadline — just inside Vercel's 60 s max-duration.
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 58_000);
+
+        let res: Response;
+        try {
+          res = await fetch('/api/transcribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({ audio: base64, mimeType }),
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+
         if (!res.ok) {
-          reject(new Error(`Transcription failed: ${res.status}`));
+          const body = await res.text().catch(() => '');
+          console.error(`[transcribe] HTTP ${res.status}:`, body);
+          reject(new Error(`Transcription HTTP ${res.status}: ${body.slice(0, 120)}`));
           return;
         }
         const data = await res.json();
         resolve((data.transcript ?? '').trim());
-      } catch (err) {
-        reject(err);
+      } catch (err: any) {
+        if (err?.name === 'AbortError') {
+          reject(new Error('Transcription timed out — please try a shorter recording'));
+        } else {
+          reject(err);
+        }
       }
     };
     reader.onerror = () => reject(reader.error);

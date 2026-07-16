@@ -11,17 +11,31 @@ const GEMINI_API_URL =
 // 55 s — gives the fetch a hard deadline just under Vercel's 60 s max-duration
 const FETCH_TIMEOUT_MS = 55_000;
 
+// Gemini only accepts base MIME types without codec parameters.
+// e.g. "audio/webm;codecs=opus" → "audio/webm"
+function normaliseAudioMime(raw: string): string {
+  const base = raw.split(";")[0].trim().toLowerCase();
+  if (base === "audio/ogg") return "audio/ogg";
+  if (base === "audio/webm") return "audio/webm";
+  if (base === "audio/mp4" || base === "audio/x-m4a") return "audio/mp4";
+  if (base === "audio/wav" || base === "audio/wave") return "audio/wav";
+  return base; // aac, flac, mp3, etc — return as-is
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
 
-  const { audio, mimeType } = req.body as { audio: string; mimeType: string };
-  if (!audio || !mimeType) {
+  const { audio, mimeType: rawMimeType } = req.body as { audio: string; mimeType: string };
+  if (!audio || !rawMimeType) {
     res.status(400).json({ error: "audio and mimeType are required" });
     return;
   }
+
+  // Strip codec parameters — Gemini only accepts bare MIME types
+  const mimeType = normaliseAudioMime(rawMimeType);
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -32,7 +46,7 @@ export default async function handler(req: any, res: any) {
   // Estimate payload size for logging
   const estimatedBytes = Math.round((audio.length * 3) / 4);
   console.log(
-    `[transcribe] mimeType=${mimeType} payloadBytes≈${estimatedBytes}`
+    `[transcribe] rawMime=${rawMimeType} → mime=${mimeType} payloadBytes≈${estimatedBytes}`
   );
 
   const controller = new AbortController();
