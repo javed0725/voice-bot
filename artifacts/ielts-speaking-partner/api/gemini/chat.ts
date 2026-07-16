@@ -1,4 +1,5 @@
-import { GoogleGenAI, Type } from "@google/genai";
+// No npm imports — uses built-in fetch so Vercel doesn't need to bundle
+// @google/genai or any other package.
 
 export const config = {
   api: {
@@ -7,6 +8,9 @@ export const config = {
     },
   },
 };
+
+const GEMINI_API_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent";
 
 const IELTS_EXAMINER_SYSTEM_INSTRUCTION = `You are an expert IELTS Speaking Examiner and coach having a real-time voice conversation with a student.
 
@@ -24,49 +28,43 @@ Band Score Breakdown rules:
 Vocabulary Upgrader rules:
 - Identify exactly 1 or 2 simple/basic words or phrases the student actually used in their most recent message.
 - For each, suggest a Band 7+/8+ synonym or idiomatic expression that could naturally replace it in that sentence.
-- If the student's message is too short or already advanced, pick whatever simple word is closest to hand (do not leave the list empty except when the message is a single trivial word).
+- If the student's message is too short or already advanced, pick whatever simple word is closest to hand.
 
 Coaching feedback rules:
-- Evaluate the grammar, word choice, and phrasing of the student's most recent message.
 - "correction": a short correction of any grammar/word-choice mistakes. If there are none, say "Perfect grammar!"
 - "bandUpgrade": a more natural, idiomatic, or higher band-score way to phrase what they said.
 
-You MUST respond with ONLY a single JSON object matching the required schema — no markdown, no code fences, no extra commentary.`;
+You MUST respond with ONLY a single JSON object matching this schema:
+{"reply":"string","correction":"string","bandUpgrade":"string","bandScores":{"fluency":number,"lexicalResource":number,"grammaticalRange":number,"pronunciation":number,"overall":number},"vocabularyUpgrades":[{"original":"string","upgrade":"string"}]}`;
 
 function buildTopicInstruction(topic: string): string {
-  return `
-
-Topic focus rules (STRICT):
-- The student has selected the topic "${topic}" for this practice session.
-- Every question and follow-up you ask MUST stay strictly within this topic. Do not drift into unrelated subjects.
-- Mirror natural IELTS Part 1/Part 3 style questioning for this topic: start broad, then ask progressively deeper follow-up questions about it.
-- If the student's answer drifts off-topic, gently steer the conversation back to "${topic}" in your reply.`;
+  return `\n\nTopic focus: The student selected "${topic}". Keep ALL questions strictly on this topic. Gently redirect if they drift.`;
 }
 
-const EXAMINER_RESPONSE_SCHEMA = {
-  type: Type.OBJECT,
+const RESPONSE_SCHEMA = {
+  type: "OBJECT",
   properties: {
-    reply: { type: Type.STRING },
-    correction: { type: Type.STRING },
-    bandUpgrade: { type: Type.STRING },
+    reply: { type: "STRING" },
+    correction: { type: "STRING" },
+    bandUpgrade: { type: "STRING" },
     bandScores: {
-      type: Type.OBJECT,
+      type: "OBJECT",
       properties: {
-        fluency: { type: Type.NUMBER },
-        lexicalResource: { type: Type.NUMBER },
-        grammaticalRange: { type: Type.NUMBER },
-        pronunciation: { type: Type.NUMBER },
-        overall: { type: Type.NUMBER },
+        fluency: { type: "NUMBER" },
+        lexicalResource: { type: "NUMBER" },
+        grammaticalRange: { type: "NUMBER" },
+        pronunciation: { type: "NUMBER" },
+        overall: { type: "NUMBER" },
       },
       required: ["fluency", "lexicalResource", "grammaticalRange", "pronunciation", "overall"],
     },
     vocabularyUpgrades: {
-      type: Type.ARRAY,
+      type: "ARRAY",
       items: {
-        type: Type.OBJECT,
+        type: "OBJECT",
         properties: {
-          original: { type: Type.STRING },
-          upgrade: { type: Type.STRING },
+          original: { type: "STRING" },
+          upgrade: { type: "STRING" },
         },
         required: ["original", "upgrade"],
       },
@@ -75,30 +73,29 @@ const EXAMINER_RESPONSE_SCHEMA = {
   required: ["reply", "correction", "bandUpgrade", "bandScores", "vocabularyUpgrades"],
 };
 
-const FALLBACK_BAND_SCORES = {
+const FALLBACK = {
   fluency: 6, lexicalResource: 6, grammaticalRange: 6, pronunciation: 6, overall: 6,
 };
 
-function parseExaminerResponse(text: string) {
-  let parsed: any;
+function safeParseReply(text: string) {
   try {
-    parsed = JSON.parse(text.trim());
+    const p = JSON.parse(text.trim());
+    return {
+      reply: typeof p.reply === "string" ? p.reply : text.trim(),
+      correction: typeof p.correction === "string" ? p.correction : "",
+      bandUpgrade: typeof p.bandUpgrade === "string" ? p.bandUpgrade : "",
+      bandScores: p.bandScores ?? FALLBACK,
+      vocabularyUpgrades: Array.isArray(p.vocabularyUpgrades) ? p.vocabularyUpgrades : [],
+    };
   } catch {
     return {
       reply: text.trim(),
-      correction: "Unable to generate feedback for this turn.",
+      correction: "",
       bandUpgrade: "",
-      bandScores: FALLBACK_BAND_SCORES,
+      bandScores: FALLBACK,
       vocabularyUpgrades: [],
     };
   }
-  return {
-    reply: typeof parsed.reply === "string" ? parsed.reply : "",
-    correction: typeof parsed.correction === "string" ? parsed.correction : "",
-    bandUpgrade: typeof parsed.bandUpgrade === "string" ? parsed.bandUpgrade : "",
-    bandScores: parsed.bandScores ?? FALLBACK_BAND_SCORES,
-    vocabularyUpgrades: Array.isArray(parsed.vocabularyUpgrades) ? parsed.vocabularyUpgrades : [],
-  };
 }
 
 export default async function handler(req: any, res: any) {
@@ -109,7 +106,7 @@ export default async function handler(req: any, res: any) {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    res.status(500).json({ error: "GEMINI_API_KEY not configured on this deployment" });
+    res.status(500).json({ error: "GEMINI_API_KEY not configured" });
     return;
   }
 
@@ -133,28 +130,42 @@ export default async function handler(req: any, res: any) {
     : IELTS_EXAMINER_SYSTEM_INSTRUCTION;
 
   try {
-    const genAI = new GoogleGenAI({ apiKey });
-    const response = await genAI.models.generateContent({
-      model: "gemini-flash-lite-latest",
-      contents,
-      config: {
-        systemInstruction,
-        maxOutputTokens: 1024,
-        thinkingConfig: { thinkingBudget: 0 },
-        responseMimeType: "application/json",
-        responseSchema: EXAMINER_RESPONSE_SCHEMA,
-      },
+    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: systemInstruction }],
+        },
+        contents,
+        generationConfig: {
+          maxOutputTokens: 1024,
+          responseMimeType: "application/json",
+          responseSchema: RESPONSE_SCHEMA,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      }),
     });
 
-    const text = response.text;
-    if (!text) {
-      res.status(502).json({ error: "Gemini returned an empty response" });
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("Gemini chat API error:", err);
+      res.status(502).json({ error: "Gemini API error" });
       return;
     }
 
-    res.json(parseExaminerResponse(text));
-  } catch (err: any) {
+    const data: any = await response.json();
+    const text: string =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+    if (!text) {
+      res.status(502).json({ error: "Empty response from Gemini" });
+      return;
+    }
+
+    res.json(safeParseReply(text));
+  } catch (err) {
     console.error("Gemini chat error:", err);
-    res.status(502).json({ error: "Failed to get examiner reply" });
+    res.status(500).json({ error: "Failed to get examiner reply" });
   }
 }
