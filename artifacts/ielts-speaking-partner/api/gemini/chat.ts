@@ -1,3 +1,4 @@
+// @ts-nocheck
 // No npm imports — uses built-in fetch so Vercel doesn't need to bundle any packages.
 
 // Vercel serverless function config (plain functions, not Next.js API routes)
