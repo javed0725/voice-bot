@@ -12,7 +12,7 @@ const ELEVENLABS_BASE = "https://api.elevenlabs.io/v1/text-to-speech";
 // Popular alternatives:
 //   Adam  (pNInz6obpgmq52GQEwqc) — authoritative American male
 //   Bella (EXAVITQu4vr4xnSDxMaL) — warm American female
-const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // Rachel
+const DEFAULT_VOICE_ID = "IRHApOXLvnW57QJPQH2P";
 
 // eleven_turbo_v2 is available on all ElevenLabs plans including free tier.
 // eleven_turbo_v2_5 / eleven_flash_v2_5 require a paid plan — avoid for now.
