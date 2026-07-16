@@ -1,16 +1,15 @@
-// No npm imports — uses built-in fetch so Vercel doesn't need to bundle
-// @google/genai or any other package.
+// No npm imports — uses built-in fetch so Vercel doesn't need to bundle any packages.
 
+// Vercel serverless function config (plain functions, not Next.js API routes)
 export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "50mb",
-    },
-  },
+  maxDuration: 60, // seconds — overrides Vercel's default 10 s limit
 };
 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent";
+
+// 55 s — gives the fetch a hard deadline just under Vercel's 60 s max-duration
+const FETCH_TIMEOUT_MS = 55_000;
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
@@ -30,10 +29,20 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
+  // Estimate payload size for logging
+  const estimatedBytes = Math.round((audio.length * 3) / 4);
+  console.log(
+    `[transcribe] mimeType=${mimeType} payloadBytes≈${estimatedBytes}`
+  );
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
   try {
     const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({
         contents: [
           {
@@ -57,10 +66,12 @@ export default async function handler(req: any, res: any) {
       }),
     });
 
+    clearTimeout(timer);
+
     if (!response.ok) {
       const err = await response.text();
-      console.error("Gemini transcribe API error:", err);
-      res.status(502).json({ error: "Gemini API error" });
+      console.error("[transcribe] Gemini API error:", response.status, err);
+      res.status(502).json({ error: `Gemini API error ${response.status}` });
       return;
     }
 
@@ -69,14 +80,24 @@ export default async function handler(req: any, res: any) {
       data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     const trimmed = text.trim();
 
+    console.log(
+      `[transcribe] success, transcript length=${trimmed.length}`
+    );
+
     if (/^(no speech|nothing|inaudible|silent|empty)/i.test(trimmed)) {
       res.json({ transcript: "" });
       return;
     }
 
     res.json({ transcript: trimmed });
-  } catch (err) {
-    console.error("Transcription error:", err);
-    res.status(500).json({ error: "Failed to transcribe audio" });
+  } catch (err: any) {
+    clearTimeout(timer);
+    if (err?.name === "AbortError") {
+      console.error("[transcribe] Gemini fetch timed out after", FETCH_TIMEOUT_MS, "ms");
+      res.status(504).json({ error: "Gemini API timed out" });
+    } else {
+      console.error("[transcribe] Unexpected error:", err);
+      res.status(500).json({ error: "Failed to transcribe audio" });
+    }
   }
 }

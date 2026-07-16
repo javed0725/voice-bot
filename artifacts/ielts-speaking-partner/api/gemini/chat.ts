@@ -1,16 +1,15 @@
-// No npm imports — uses built-in fetch so Vercel doesn't need to bundle
-// @google/genai or any other package.
+// No npm imports — uses built-in fetch so Vercel doesn't need to bundle any packages.
 
+// Vercel serverless function config (plain functions, not Next.js API routes)
 export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "4mb",
-    },
-  },
+  maxDuration: 60, // seconds — overrides Vercel's default 10 s limit
 };
 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent";
+
+// 55 s — gives the fetch a hard deadline just under Vercel's 60 s max-duration
+const FETCH_TIMEOUT_MS = 55_000;
 
 const IELTS_EXAMINER_SYSTEM_INSTRUCTION = `You are an expert IELTS Speaking Examiner and coach having a real-time voice conversation with a student.
 
@@ -120,6 +119,8 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
+  console.log(`[chat] messages=${messages.length} topic=${topic ?? "none"}`);
+
   const contents = messages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
@@ -129,10 +130,14 @@ export default async function handler(req: any, res: any) {
     ? IELTS_EXAMINER_SYSTEM_INSTRUCTION + buildTopicInstruction(topic)
     : IELTS_EXAMINER_SYSTEM_INSTRUCTION;
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
   try {
     const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({
         systemInstruction: {
           parts: [{ text: systemInstruction }],
@@ -147,10 +152,12 @@ export default async function handler(req: any, res: any) {
       }),
     });
 
+    clearTimeout(timer);
+
     if (!response.ok) {
       const err = await response.text();
-      console.error("Gemini chat API error:", err);
-      res.status(502).json({ error: "Gemini API error" });
+      console.error("[chat] Gemini API error:", response.status, err);
+      res.status(502).json({ error: `Gemini API error ${response.status}` });
       return;
     }
 
@@ -163,9 +170,16 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
+    console.log(`[chat] success, reply length=${text.length}`);
     res.json(safeParseReply(text));
-  } catch (err) {
-    console.error("Gemini chat error:", err);
-    res.status(500).json({ error: "Failed to get examiner reply" });
+  } catch (err: any) {
+    clearTimeout(timer);
+    if (err?.name === "AbortError") {
+      console.error("[chat] Gemini fetch timed out after", FETCH_TIMEOUT_MS, "ms");
+      res.status(504).json({ error: "Gemini API timed out" });
+    } else {
+      console.error("[chat] Unexpected error:", err);
+      res.status(500).json({ error: "Failed to get examiner reply" });
+    }
   }
 }

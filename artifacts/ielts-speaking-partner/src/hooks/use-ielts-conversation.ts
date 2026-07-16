@@ -168,12 +168,35 @@ export function useIeltsConversation() {
     }
   }
 
+  // Pick the most compressed MIME type supported by this browser.
+  // audio/webm;codecs=opus is ~16–24 kbps for speech — much smaller than
+  // the default which can be 128 kbps+ and causes slow uploads on mobile.
+  function pickAudioMimeType(): string {
+    const candidates = [
+      'audio/webm;codecs=opus',
+      'audio/ogg;codecs=opus',
+      'audio/webm',
+      'audio/ogg',
+      'audio/mp4',
+    ];
+    for (const m of candidates) {
+      if (MediaRecorder.isTypeSupported(m)) return m;
+    }
+    return ''; // let browser decide
+  }
+
   async function startAudioRecording() {
     const stream = await ensureMediaStream();
     if (!stream) return;
     try {
       audioChunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
+      const mimeType = pickAudioMimeType();
+      const options: MediaRecorderOptions = {
+        // ~24 kbps is plenty for speech recognition; keeps blobs small
+        audioBitsPerSecond: 24_000,
+        ...(mimeType ? { mimeType } : {}),
+      };
+      const recorder = new MediaRecorder(stream, options);
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
