@@ -15,6 +15,9 @@
     },
     "api/gemini/chat.ts": {
       "maxDuration": 60
+    },
+    "api/tts.ts": {
+      "maxDuration": 30
     }
   },
   "rewrites": [

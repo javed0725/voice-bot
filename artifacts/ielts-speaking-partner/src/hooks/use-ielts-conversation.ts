@@ -133,6 +133,7 @@ export function useIeltsConversation() {
   const mediaStreamRef   = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef   = useRef<Blob[]>([]);
+  const currentAudioRef  = useRef<HTMLAudioElement | null>(null);
 
   // --- Mock test timer ---------------------------------------------------
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -150,10 +151,16 @@ export function useIeltsConversation() {
     if (!navigator.mediaDevices?.getUserMedia) {
       setHasMicSupport(false);
     }
+    // Pre-warm Web Speech voices for the fallback path
     const loadVoices = () => window.speechSynthesis.getVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
     loadVoices();
     return () => {
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.src = '';
+        currentAudioRef.current = null;
+      }
       window.speechSynthesis.cancel();
       clearMockTimer();
       mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -161,6 +168,18 @@ export function useIeltsConversation() {
   }, []);
 
   // --- Voice synthesis ---------------------------------------------------
+
+  /** Stop any in-progress ElevenLabs audio (or Web Speech fallback). */
+  const stopSpeaking = () => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.src = '';
+      currentAudioRef.current = null;
+    }
+    window.speechSynthesis.cancel();
+  };
+
+  /** Web Speech API fallback — used when ElevenLabs is unavailable. */
   const PREFERRED_VOICE_NAMES = [
     'Google US English',
     'Google UK English Female',
@@ -171,7 +190,6 @@ export function useIeltsConversation() {
     'Samantha',
     'Daniel',
   ];
-
   const pickVoice = (voices: SpeechSynthesisVoice[]) => {
     const eng = voices.filter(v => v.lang.toLowerCase().startsWith('en'));
     if (!eng.length) return undefined;
@@ -181,8 +199,7 @@ export function useIeltsConversation() {
     }
     return eng.find(v => !v.localService) ?? eng[0];
   };
-
-  const speak = (text: string, onEnd: () => void) => {
+  const speakFallback = (text: string, onEnd: () => void) => {
     window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(text);
     utt.rate = 0.95;
@@ -192,6 +209,58 @@ export function useIeltsConversation() {
     utt.onend = onEnd;
     utt.onerror = onEnd;
     window.speechSynthesis.speak(utt);
+  };
+
+  /**
+   * Speak text via ElevenLabs TTS (Rachel voice).
+   * Falls back to the browser Web Speech API if the API call fails
+   * (e.g. key not configured, quota exceeded, network error).
+   */
+  const speak = (text: string, onEnd: () => void) => {
+    stopSpeaking();
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+
+    fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({ text }),
+    })
+      .then(async (res) => {
+        clearTimeout(timeout);
+        if (!res.ok) {
+          const detail = await res.text().catch(() => '');
+          throw new Error(`TTS HTTP ${res.status}: ${detail.slice(0, 120)}`);
+        }
+        return res.blob();
+      })
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        currentAudioRef.current = audio;
+        const cleanup = () => {
+          URL.revokeObjectURL(url);
+          if (currentAudioRef.current === audio) currentAudioRef.current = null;
+        };
+        audio.onended = () => { cleanup(); onEnd(); };
+        audio.onerror = () => {
+          cleanup();
+          console.error('[speak] ElevenLabs audio playback error — falling back to Web Speech API');
+          speakFallback(text, onEnd);
+        };
+        audio.play().catch((err) => {
+          cleanup();
+          console.error('[speak] Audio.play() rejected — falling back to Web Speech API:', err);
+          speakFallback(text, onEnd);
+        });
+      })
+      .catch((err: unknown) => {
+        clearTimeout(timeout);
+        console.error('[speak] ElevenLabs TTS failed — falling back to Web Speech API:', err);
+        speakFallback(text, onEnd);
+      });
   };
 
   // --- Audio recording helpers -------------------------------------------
@@ -269,7 +338,7 @@ export function useIeltsConversation() {
   // --- Core conversation logic -------------------------------------------
 
   const handleUserMessage = (text: string, audioUrl?: string) => {
-    window.speechSynthesis.cancel();
+    stopSpeaking();
     const fillerWords = detectFillerWords(text);
     const topic = freePracticeTopicRef.current;
 
@@ -390,7 +459,7 @@ export function useIeltsConversation() {
       // User tapped "done" — stop recording and transcribe
       finishListeningRef.current();
     } else if (state === 'speaking' || state === 'idle') {
-      if (state === 'speaking') window.speechSynthesis.cancel();
+      if (state === 'speaking') stopSpeaking();
       setError(null);
       isListeningRef.current = true;
       setState('listening');
@@ -404,7 +473,7 @@ export function useIeltsConversation() {
   };
 
   const resetConversation = () => {
-    window.speechSynthesis.cancel();
+    stopSpeaking();
     isListeningRef.current = false;
     if (mediaRecorderRef.current?.state !== 'inactive') {
       mediaRecorderRef.current?.stop();
@@ -450,7 +519,7 @@ export function useIeltsConversation() {
   };
 
   const advanceToPart2 = () => {
-    window.speechSynthesis.cancel();
+    stopSpeaking();
     const cueCard = pickRandomCueCard();
     setCurrentCueCard(cueCard);
     setMockStage('part2-prep');
@@ -476,7 +545,7 @@ export function useIeltsConversation() {
 
   const advanceToPart3 = () => {
     if (!currentCueCard) return;
-    window.speechSynthesis.cancel();
+    stopSpeaking();
     setMockStage('part3');
     const message = formatPart3Message(currentCueCard);
     setMessages(prev => [...prev, { role: 'assistant', content: message, isMockTransition: true }]);
