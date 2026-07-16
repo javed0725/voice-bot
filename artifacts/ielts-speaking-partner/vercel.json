@@ -1,6 +1,6 @@
 {
-  "installCommand": "cd ../.. && npm install --legacy-peer-deps || true",
-  "buildCommand": "vite build",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "buildCommand": "../../node_modules/.bin/vite build --config vite.config.ts",
   "outputDirectory": "dist/public",
   "build": {
     "env": {
