@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AlertCircle, RefreshCw, TrendingUp, ArrowRight, Check } from 'lucide-react';
-import { useIeltsConversation, type ConversationMode } from '@/hooks/use-ielts-conversation';
+import { useIeltsConversation, type ConversationMode, type AppMode } from '@/hooks/use-ielts-conversation';
 import { MicButton } from '@/components/mic-button';
 import { Transcript } from '@/components/transcript';
 import { MockTimer } from '@/components/mock-timer';
@@ -15,6 +15,7 @@ export function PracticeSession() {
     error,
     hasSpeechSupport,
     mode,
+    appMode,
     mockStage,
     currentCueCard,
     timer,
@@ -28,82 +29,147 @@ export function PracticeSession() {
     advanceToPart3,
   } = useIeltsConversation();
 
+  const [selectedAppMode, setSelectedAppMode] = useState<AppMode>('ielts');
   const [selectedMode, setSelectedMode] = useState<ConversationMode>('practice');
   const [selectedTopicId, setSelectedTopicId] = useState<string>('general');
   const [showProgress, setShowProgress] = useState(false);
 
   if (state === 'gate') {
+    const isGermanSelected = selectedAppMode === 'german';
     return (
       <div className="min-h-screen bg-[#FDFBF7] flex flex-col items-center justify-center p-6 text-center">
         <div className="max-w-md w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="w-24 h-24 bg-[#E86A4C] rounded-[2rem] rotate-3 mx-auto shadow-xl flex items-center justify-center">
+
+          {/* App-mode switcher: IELTS ↔ German Tutor */}
+          <div className="flex rounded-2xl bg-gray-100 p-1.5 gap-1">
+            <button
+              onClick={() => setSelectedAppMode('ielts')}
+              className={cn(
+                'flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all',
+                !isGermanSelected ? 'bg-white text-[#2A3B4C] shadow-sm' : 'text-gray-500'
+              )}
+            >
+              🎓 IELTS Practice
+            </button>
+            <button
+              onClick={() => setSelectedAppMode('german')}
+              className={cn(
+                'flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all',
+                isGermanSelected ? 'bg-white text-[#2A3B4C] shadow-sm' : 'text-gray-500'
+              )}
+            >
+              🇩🇪 German Tutor
+            </button>
+          </div>
+
+          {/* Hero icon + heading */}
+          <div className={cn(
+            'w-24 h-24 rounded-[2rem] rotate-3 mx-auto shadow-xl flex items-center justify-center transition-colors duration-300',
+            isGermanSelected ? 'bg-[#3A6BC4]' : 'bg-[#E86A4C]'
+          )}>
             <div className="w-12 h-12 border-4 border-white rounded-full opacity-80"></div>
           </div>
 
           <div className="space-y-3">
-            <h1 className="text-4xl font-bold text-[#2A3B4C] tracking-tight">IELTS Speaking Partner</h1>
-            <p className="text-[#5A6C7D] text-lg">Practice your conversational English with an AI examiner. Speak naturally, make mistakes, and get comfortable.</p>
+            {isGermanSelected ? (
+              <>
+                <h1 className="text-4xl font-bold text-[#2A3B4C] tracking-tight">German Tutor</h1>
+                <p className="text-[#5A6C7D] text-lg">Learn German from scratch with a patient AI tutor. Start speaking from day one — greetings, numbers, everyday phrases and more.</p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-4xl font-bold text-[#2A3B4C] tracking-tight">IELTS Speaking Partner</h1>
+                <p className="text-[#5A6C7D] text-lg">Practice your conversational English with an AI examiner. Speak naturally, make mistakes, and get comfortable.</p>
+              </>
+            )}
           </div>
 
-          <div className="flex rounded-2xl bg-gray-100 p-1.5 gap-1">
-            <button
-              onClick={() => setSelectedMode('practice')}
-              className={cn(
-                'flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all',
-                selectedMode === 'practice' ? 'bg-white text-[#2A3B4C] shadow-sm' : 'text-gray-500'
-              )}
-            >
-              Free Practice
-            </button>
-            <button
-              onClick={() => setSelectedMode('mock')}
-              className={cn(
-                'flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all',
-                selectedMode === 'mock' ? 'bg-white text-[#2A3B4C] shadow-sm' : 'text-gray-500'
-              )}
-            >
-              Mock Test Mode
-            </button>
-          </div>
-          <p className="text-xs text-gray-400 -mt-6">
-            {selectedMode === 'practice'
-              ? 'Pick a topic to focus on, or keep it open-ended.'
-              : 'A structured Part 1 → Part 2 (Cue Card) → Part 3 mock exam with timers.'}
-          </p>
-
-          {selectedMode === 'practice' && (
-            <div className="text-left space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <p className="text-xs font-semibold text-[#5A6C7D] uppercase tracking-wide">Choose a topic</p>
-              <div className="grid grid-cols-2 gap-2">
-                {FREE_PRACTICE_TOPICS.map((topic) => {
-                  const isSelected = selectedTopicId === topic.id;
-                  return (
-                    <button
-                      key={topic.id}
-                      onClick={() => setSelectedTopicId(topic.id)}
-                      aria-pressed={isSelected}
-                      className={cn(
-                        'relative flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-sm font-medium text-center transition-all',
-                        isSelected
-                          ? 'bg-[#E86A4C] border-[#E86A4C] text-white shadow-md'
-                          : 'bg-white border-gray-200 text-[#2A3B4C] hover:border-[#E86A4C] hover:text-[#E86A4C]'
-                      )}
-                    >
-                      {isSelected && <Check size={14} className="shrink-0" />}
-                      <span className="leading-tight">{topic.label}</span>
-                    </button>
-                  );
-                })}
+          {/* IELTS-only: sub-mode + topic picker */}
+          {!isGermanSelected && (
+            <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="flex rounded-2xl bg-gray-100 p-1.5 gap-1">
+                <button
+                  onClick={() => setSelectedMode('practice')}
+                  className={cn(
+                    'flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all',
+                    selectedMode === 'practice' ? 'bg-white text-[#2A3B4C] shadow-sm' : 'text-gray-500'
+                  )}
+                >
+                  Free Practice
+                </button>
+                <button
+                  onClick={() => setSelectedMode('mock')}
+                  className={cn(
+                    'flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all',
+                    selectedMode === 'mock' ? 'bg-white text-[#2A3B4C] shadow-sm' : 'text-gray-500'
+                  )}
+                >
+                  Mock Test Mode
+                </button>
               </div>
+              <p className="text-xs text-gray-400 -mt-4">
+                {selectedMode === 'practice'
+                  ? 'Pick a topic to focus on, or keep it open-ended.'
+                  : 'A structured Part 1 → Part 2 (Cue Card) → Part 3 mock exam with timers.'}
+              </p>
+
+              {selectedMode === 'practice' && (
+                <div className="text-left space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                  <p className="text-xs font-semibold text-[#5A6C7D] uppercase tracking-wide">Choose a topic</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {FREE_PRACTICE_TOPICS.map((topic) => {
+                      const isSelected = selectedTopicId === topic.id;
+                      return (
+                        <button
+                          key={topic.id}
+                          onClick={() => setSelectedTopicId(topic.id)}
+                          aria-pressed={isSelected}
+                          className={cn(
+                            'relative flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-sm font-medium text-center transition-all',
+                            isSelected
+                              ? 'bg-[#E86A4C] border-[#E86A4C] text-white shadow-md'
+                              : 'bg-white border-gray-200 text-[#2A3B4C] hover:border-[#E86A4C] hover:text-[#E86A4C]'
+                          )}
+                        >
+                          {isSelected && <Check size={14} className="shrink-0" />}
+                          <span className="leading-tight">{topic.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* German-only: brief feature bullets */}
+          {isGermanSelected && (
+            <div className="text-left bg-blue-50 border border-blue-100 rounded-2xl p-4 space-y-2 animate-in fade-in duration-300">
+              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">What you'll practice</p>
+              <ul className="text-sm text-[#2A3B4C] space-y-1">
+                {['Greetings & introductions', 'Numbers & colours', 'Days, months & weather', 'Food, shopping & directions', 'Gentle grammar corrections + translations'].map(item => (
+                  <li key={item} className="flex items-center gap-2">
+                    <Check size={13} className="text-blue-500 shrink-0" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
           <div className="pt-2">
             <button
-              onClick={() => startPractice(selectedMode, selectedTopicId)}
-              className="w-full py-4 px-8 rounded-full bg-[#2A3B4C] text-white text-lg font-semibold hover:-translate-y-1 hover:shadow-xl transition-all duration-300"
+              onClick={() => startPractice(
+                isGermanSelected ? 'practice' : selectedMode,
+                isGermanSelected ? undefined : selectedTopicId,
+                selectedAppMode,
+              )}
+              className={cn(
+                'w-full py-4 px-8 rounded-full text-white text-lg font-semibold hover:-translate-y-1 hover:shadow-xl transition-all duration-300',
+                isGermanSelected ? 'bg-[#3A6BC4]' : 'bg-[#2A3B4C]'
+              )}
             >
-              Start Practice Session
+              {isGermanSelected ? 'Start German Lesson' : 'Start Practice Session'}
             </button>
             <p className="mt-4 text-sm text-gray-400">Requires microphone access</p>
           </div>
@@ -123,12 +189,19 @@ export function PracticeSession() {
             <div className="w-4 h-4 border-2 border-white rounded-full opacity-80"></div>
           </div>
           <div className="flex flex-col">
-            <span className="font-bold text-[#2A3B4C] tracking-wide text-lg leading-tight">IELTS Partner</span>
-            {mode === 'mock' && mockStage && (
+            <span className="font-bold text-[#2A3B4C] tracking-wide text-lg leading-tight">
+              {appMode === 'german' ? 'German Tutor' : 'IELTS Partner'}
+            </span>
+            {appMode !== 'german' && mode === 'mock' && mockStage && (
               <span className="text-[11px] font-semibold text-[#E86A4C] uppercase tracking-wider">
                 {mockStage === 'part1' && 'Mock Test · Part 1'}
                 {(mockStage === 'part2-prep' || mockStage === 'part2-speaking') && 'Mock Test · Part 2'}
                 {mockStage === 'part3' && 'Mock Test · Part 3'}
+              </span>
+            )}
+            {appMode === 'german' && (
+              <span className="text-[11px] font-semibold text-[#3A6BC4] uppercase tracking-wider">
+                Deutsch · Beginner
               </span>
             )}
           </div>
@@ -160,6 +233,7 @@ export function PracticeSession() {
             isThinking={state === 'thinking'}
             onSendText={submitText}
             showFallbackInput={!hasSpeechSupport || state === 'idle'}
+            appMode={appMode}
           />
         </div>
 

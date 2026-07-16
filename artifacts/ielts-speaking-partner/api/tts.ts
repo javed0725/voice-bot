@@ -16,6 +16,8 @@ const DEFAULT_VOICE_ID = "ErXwobaYiN019PkySvjV"; // Antoni (ElevenLabs pre-made,
 
 // eleven_turbo_v2 is available on all ElevenLabs plans including free tier.
 // eleven_turbo_v2_5 / eleven_flash_v2_5 require a paid plan — avoid for now.
+// eleven_turbo_v2 is natively multilingual — German text is pronounced correctly
+// without any extra configuration or language-gating code.
 const MODEL_ID = "eleven_turbo_v2";
 
 export default async function handler(req, res) {

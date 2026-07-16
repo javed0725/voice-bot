@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { DisplayMessage } from '@/hooks/use-ielts-conversation';
+import type { DisplayMessage, AppMode } from '@/hooks/use-ielts-conversation';
 import { cn } from '@/lib/utils';
 import { SendHorizontal, AlertTriangle } from 'lucide-react';
 import { BandScoreBreakdown } from '@/components/band-score-breakdown';
@@ -9,9 +9,11 @@ interface TranscriptProps {
   isThinking: boolean;
   onSendText: (text: string) => void;
   showFallbackInput: boolean;
+  appMode?: AppMode;
 }
 
-export function Transcript({ messages, isThinking, onSendText, showFallbackInput }: TranscriptProps) {
+export function Transcript({ messages, isThinking, onSendText, showFallbackInput, appMode = 'ielts' }: TranscriptProps) {
+  const isGerman = appMode === 'german';
   const endRef = useRef<HTMLDivElement>(null);
   const [textInput, setTextInput] = useState('');
 
@@ -44,7 +46,7 @@ export function Transcript({ messages, isThinking, onSendText, showFallbackInput
           >
             {msg.role === 'assistant' && (
               <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                {msg.isMockTransition ? 'Examiner · Test Update' : 'Examiner'}
+                {isGerman ? 'Tutor' : msg.isMockTransition ? 'Examiner · Test Update' : 'Examiner'}
               </div>
             )}
             <div className="whitespace-pre-line">{msg.content}</div>
@@ -68,14 +70,35 @@ export function Transcript({ messages, isThinking, onSendText, showFallbackInput
               <>
                 <div className="mt-4 pt-3 border-t border-gray-200 text-sm text-gray-600 space-y-1.5">
                   <div className="flex items-center gap-1.5 font-semibold text-[#E86A4C] text-xs uppercase tracking-wider">
-                    Coach Feedback
+                    {isGerman ? 'Tutor Feedback' : 'Coach Feedback'}
                   </div>
                   <p><span className="font-medium text-gray-700">Correction:</span> {msg.correction}</p>
                   {msg.bandUpgrade && (
-                    <p><span className="font-medium text-gray-700">Band Upgrade:</span> {msg.bandUpgrade}</p>
+                    <p>
+                      <span className="font-medium text-gray-700">
+                        {isGerman ? 'German Upgrade:' : 'Band Upgrade:'}
+                      </span>{' '}
+                      {msg.bandUpgrade}
+                    </p>
                   )}
                 </div>
-                <BandScoreBreakdown bandScores={msg.bandScores} vocabularyUpgrades={msg.vocabularyUpgrades ?? []} />
+                {!isGerman && (
+                  <BandScoreBreakdown bandScores={msg.bandScores} vocabularyUpgrades={msg.vocabularyUpgrades ?? []} />
+                )}
+                {isGerman && (msg.vocabularyUpgrades?.length ?? 0) > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-200 space-y-1">
+                    <div className="text-xs font-semibold text-[#E86A4C] uppercase tracking-wider mb-1.5">
+                      🇩🇪 New German Words
+                    </div>
+                    {msg.vocabularyUpgrades!.map((v, i) => (
+                      <div key={i} className="text-sm text-gray-700">
+                        <span className="font-medium">{v.original}</span>
+                        <span className="text-gray-400 mx-1.5">→</span>
+                        <span className="font-semibold text-[#2A3B4C]">{v.upgrade}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </div>

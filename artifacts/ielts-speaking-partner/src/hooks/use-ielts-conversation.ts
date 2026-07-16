@@ -17,6 +17,7 @@ import { getFreePracticeTopic } from '@/lib/free-practice-topics';
 
 export type ConversationState = 'gate' | 'idle' | 'listening' | 'thinking' | 'speaking';
 export type ConversationMode = 'practice' | 'mock';
+export type AppMode = 'ielts' | 'german';
 export type MockStage = 'part1' | 'part2-prep' | 'part2-speaking' | 'part3' | null;
 
 export type DisplayMessage = GeminiChatMessage & {
@@ -119,6 +120,8 @@ export function useIeltsConversation() {
   const [mockStage, setMockStage] = useState<MockStage>(null);
   const [currentCueCard, setCurrentCueCard] = useState<CueCard | null>(null);
   const [timer, setTimer] = useState<MockTimerInfo | null>(null);
+  const [appMode, setAppMode] = useState<AppMode>('ielts');
+  const appModeRef = useRef<AppMode>('ielts');
 
   // Keep a live ref to freePracticeTopic so stale closures always read latest
   const freePracticeTopicRef = useRef(freePracticeTopic);
@@ -428,9 +431,23 @@ export function useIeltsConversation() {
 
   // --- Public actions ----------------------------------------------------
 
-  const startPractice = (selectedMode: ConversationMode = 'practice', topicId?: string) => {
+  const startPractice = (selectedMode: ConversationMode = 'practice', topicId?: string, newAppMode: AppMode = 'ielts') => {
     setError(null);
     setMode(selectedMode);
+    setAppMode(newAppMode);
+    appModeRef.current = newAppMode;
+
+    if (newAppMode === 'german') {
+      const openingLine = "Hallo! Ich bin dein Deutschlehrer. (Hello! I'm your German Tutor!) 🇩🇪 Let's start with the very basics. Do you know how to say 'thank you' in German?";
+      setFreePracticeTopic('__german_tutor__');
+      freePracticeTopicRef.current = '__german_tutor__';
+      setMockStage(null);
+      setCurrentCueCard(null);
+      setMessages([{ role: 'assistant', content: openingLine }]);
+      setState('speaking');
+      speak(openingLine, () => setState('idle'));
+      return;
+    }
 
     if (selectedMode === 'mock') {
       setFreePracticeTopic(undefined);
@@ -487,6 +504,8 @@ export function useIeltsConversation() {
     setCurrentCueCard(null);
     setFreePracticeTopic(undefined);
     freePracticeTopicRef.current = undefined;
+    setAppMode('ielts');
+    appModeRef.current = 'ielts';
     setError(null);
   };
 
@@ -559,6 +578,7 @@ export function useIeltsConversation() {
     error,
     hasSpeechSupport: hasMicSupport,
     mode,
+    appMode,
     freePracticeTopic,
     mockStage,
     currentCueCard,
