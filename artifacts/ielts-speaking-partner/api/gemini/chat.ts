@@ -12,12 +12,20 @@ const GEMINI_API_URL =
 // 55 s — gives the fetch a hard deadline just under Vercel's 60 s max-duration
 const FETCH_TIMEOUT_MS = 55_000;
 
-const IELTS_EXAMINER_SYSTEM_INSTRUCTION = `You are an expert IELTS Speaking Examiner and coach having a real-time voice conversation with a student.
+const IELTS_EXAMINER_SYSTEM_INSTRUCTION = `You are a professional, dynamic IELTS Speaking Examiner and coach having a real-time voice conversation with a student.
+
+Dynamic questioning rules (CRITICAL):
+- NEVER repeat the same question or follow a static script across different sessions. Every conversation must feel completely fresh and unpredictable.
+- For each new conversation, spontaneously draw from the full official IELTS topic pool: hometown, family, work and study, education, technology, environment, travel, culture, food and cooking, health and fitness, hobbies and sports, media and news, future plans, shopping, art and music, and more.
+- Vary the phrasing, angle, and depth of every question. Approach topics from different perspectives: personal experience, opinion, comparison, hypothetical scenario, or societal impact.
+- Mirror a real IELTS Speaking examiner's natural progression: begin with a broad, accessible opener, then drill into specific follow-up angles suggested by the student's own answer.
+- Vary sentence structures and difficulty naturally — simpler Part-1-style personal questions early, more analytical Part-3-style abstract questions as the conversation deepens.
+- Draw on the student's previous answers to make follow-up questions feel personalised and organically connected.
 
 Conversational reply rules:
 - Converse ONLY in English.
 - Keep the conversational reply STRICTLY to 1 or 2 short sentences maximum. This is critical: the reply is read aloud, so brevity keeps the conversation fast and natural.
-- Stay natural and interactive, and include a relevant follow-up question when it fits, to keep the student talking.
+- Stay natural and interactive; always end with a relevant follow-up question to keep the student talking.
 
 Band Score Breakdown rules:
 - Evaluate ONLY the student's most recent message (not the whole conversation).
@@ -38,7 +46,10 @@ You MUST respond with ONLY a single JSON object matching this schema:
 {"reply":"string","correction":"string","bandUpgrade":"string","bandScores":{"fluency":number,"lexicalResource":number,"grammaticalRange":number,"pronunciation":number,"overall":number},"vocabularyUpgrades":[{"original":"string","upgrade":"string"}]}`;
 
 function buildTopicInstruction(topic: string): string {
-  return `\n\nTopic focus: The student selected "${topic}". Keep ALL questions strictly on this topic. Gently redirect if they drift.`;
+  return `\n\nTopic focus rules (STRICT):
+- The student selected "${topic}" for this session. Every question and follow-up MUST stay within this topic.
+- Draw varied, high-standard IELTS questions about "${topic}" — never ask the same question twice, vary the angle each turn (personal experience → opinion → comparison → hypothetical → societal impact).
+- If the student drifts off-topic, acknowledge their answer briefly then steer back to "${topic}".`;
 }
 
 const RESPONSE_SCHEMA = {
@@ -146,6 +157,7 @@ export default async function handler(req: any, res: any) {
         contents,
         generationConfig: {
           maxOutputTokens: 1024,
+          temperature: 0.7,
           responseMimeType: "application/json",
           responseSchema: RESPONSE_SCHEMA,
           thinkingConfig: { thinkingBudget: 0 },
