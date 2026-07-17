@@ -23,6 +23,9 @@ router.post("/gemini/chat", async (req, res): Promise<void> => {
     const examinerReply = await getExaminerReply(
       parsed.data.messages,
       parsed.data.topic,
+      undefined, // dayId (German course day)
+      undefined, // phase (German course phase)
+      parsed.data.level,
     );
     res.json(SendGeminiChatMessageResponse.parse(examinerReply));
   } catch (err) {

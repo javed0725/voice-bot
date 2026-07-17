@@ -89,6 +89,13 @@ components:
             Optional Free Practice topic (e.g. "Hometown", "Technology"). When
             present, the examiner must keep every question and follow-up
             strictly scoped to this topic instead of open-ended conversation.
+        level:
+          type: string
+          enum: [beginner, intermediate, advanced]
+          description: >-
+            IELTS difficulty level. Beginner: ultra-simple 1-line questions (CEFR A2).
+            Intermediate: standard IELTS B1/B2. Advanced: abstract Part 3-style
+            analytical questions (CEFR C1). Defaults to intermediate when omitted.
       required:
         - messages
     GeminiChatOutput:

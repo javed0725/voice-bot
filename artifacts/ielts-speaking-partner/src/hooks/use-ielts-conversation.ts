@@ -18,6 +18,7 @@ import { getFreePracticeTopic } from '@/lib/free-practice-topics';
 export type ConversationState = 'gate' | 'idle' | 'listening' | 'thinking' | 'speaking';
 export type ConversationMode = 'practice' | 'mock';
 export type AppMode = 'ielts' | 'german';
+export type IeltsLevel = 'beginner' | 'intermediate' | 'advanced';
 export type MockStage = 'part1' | 'part2-prep' | 'part2-speaking' | 'part3' | null;
 
 export type DisplayMessage = GeminiChatMessage & {
@@ -117,15 +118,19 @@ export function useIeltsConversation() {
   const [hasMicSupport, setHasMicSupport] = useState<boolean>(true);
   const [mode, setMode] = useState<ConversationMode>('practice');
   const [freePracticeTopic, setFreePracticeTopic] = useState<string | undefined>(undefined);
+  const [freePracticeLevel, setFreePracticeLevel] = useState<IeltsLevel>('intermediate');
   const [mockStage, setMockStage] = useState<MockStage>(null);
   const [currentCueCard, setCurrentCueCard] = useState<CueCard | null>(null);
   const [timer, setTimer] = useState<MockTimerInfo | null>(null);
   const [appMode, setAppMode] = useState<AppMode>('ielts');
   const appModeRef = useRef<AppMode>('ielts');
 
-  // Keep a live ref to freePracticeTopic so stale closures always read latest
+  // Keep live refs so stale closures always read the latest values
   const freePracticeTopicRef = useRef(freePracticeTopic);
   freePracticeTopicRef.current = freePracticeTopic;
+
+  const freePracticeLevelRef = useRef<IeltsLevel>('intermediate');
+  freePracticeLevelRef.current = freePracticeLevel;
 
   const isListeningRef = useRef(false);
   const sendGeminiChatMessage = useSendGeminiChatMessage();
@@ -359,9 +364,10 @@ export function useIeltsConversation() {
         .filter(m => !m.isMockTransition)
         .map(({ role, content }) => ({ role, content }));
 
+      const level = freePracticeLevelRef.current;
       setState('thinking');
       sendGeminiChatMessageRef.current.mutate(
-        { data: { messages: history, topic } },
+        { data: { messages: history, topic, level } },
         {
           onSuccess: (res: GeminiChatOutput) => {
             setMessages(current => [
@@ -431,11 +437,13 @@ export function useIeltsConversation() {
 
   // --- Public actions ----------------------------------------------------
 
-  const startPractice = (selectedMode: ConversationMode = 'practice', topicId?: string, newAppMode: AppMode = 'ielts') => {
+  const startPractice = (selectedMode: ConversationMode = 'practice', topicId?: string, newAppMode: AppMode = 'ielts', newLevel: IeltsLevel = 'intermediate') => {
     setError(null);
     setMode(selectedMode);
     setAppMode(newAppMode);
     appModeRef.current = newAppMode;
+    setFreePracticeLevel(newLevel);
+    freePracticeLevelRef.current = newLevel;
 
     if (newAppMode === 'german') {
       const openingLine = "Hallo! Ich bin dein Deutschlehrer. (Hello! I'm your German Tutor!) 🇩🇪 Let's start with the very basics. Do you know how to say 'thank you' in German?";
@@ -580,6 +588,7 @@ export function useIeltsConversation() {
     mode,
     appMode,
     freePracticeTopic,
+    level: freePracticeLevel,
     mockStage,
     currentCueCard,
     timer,

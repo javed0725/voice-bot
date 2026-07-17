@@ -26,6 +26,8 @@ export interface GeminiChatInput {
   messages: GeminiChatMessage[];
   /** Optional Free Practice topic (e.g. "Hometown", "Technology"). When present, the examiner must keep every question and follow-up strictly scoped to this topic instead of open-ended conversation. */
   topic?: string;
+  /** IELTS difficulty level. 'beginner' = ultra-simple (CEFR A2), 'intermediate' = standard B1/B2, 'advanced' = abstract Part 3 C1. Defaults to 'intermediate' when omitted. */
+  level?: 'beginner' | 'intermediate' | 'advanced';
 }
 
 /**

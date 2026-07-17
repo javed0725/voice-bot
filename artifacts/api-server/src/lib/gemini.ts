@@ -178,6 +178,41 @@ Topic focus rules (STRICT):
 - If the student drifts off-topic, acknowledge their answer briefly then steer back to "${topic}".`;
 }
 
+/**
+ * Builds the difficulty-level addendum that controls question complexity,
+ * vocabulary level, and expected answer depth for the IELTS examiner.
+ */
+function buildLevelInstruction(level?: string): string {
+  if (level === "beginner") {
+    return `
+
+Difficulty level: BEGINNER (CEFR A2)
+- Ask ONLY extremely short, simple, friendly everyday questions — 10 words or fewer per question.
+- Use only basic vocabulary and simple present/past tense. No idioms, no subordinate clauses, no abstract thinking required.
+- Good examples: "Do you like music?", "Where do you live?", "What is your favourite food?", "Tell me about your family.", "Do you enjoy sports?"
+- If the student gives a 1–2 sentence answer, that is perfectly fine — never pressure them for more detail.
+- Your entire reply must stay under 2 short sentences. Your primary goal is to make the student feel relaxed and successful.`;
+  }
+  if (level === "advanced") {
+    return `
+
+Difficulty level: ADVANCED (IELTS Part 3 / CEFR C1)
+- Ask complex, abstract, deeply analytical IELTS Part 3-style questions that demand critical thinking and sophisticated vocabulary.
+- Focus on societal issues, global trends, philosophical implications, ethical trade-offs, and nuanced multi-sided comparisons.
+- Good examples: "To what extent has globalisation undermined cultural identity?", "How might widespread AI adoption reshape the nature of human creativity and employment?", "Is rapid economic growth inherently incompatible with environmental sustainability — or can the two coexist?"
+- Expect and reward hedging language (e.g. "it could be argued that…", "one might contend…"), precise academic vocabulary, and well-structured argumentation.
+- After each student reply, probe deeper: "Could you elaborate on that point?", "What might be a counterargument?", "How does that compare to the situation in other countries?"`;
+  }
+  // Default: intermediate
+  return `
+
+Difficulty level: INTERMEDIATE (Standard IELTS / CEFR B1–B2)
+- Ask standard IELTS Speaking questions that blend personal experience with light analytical thinking.
+- Use clear, natural vocabulary at B1–B2 level. Include occasional idiomatic expressions and phrasal verbs.
+- Good examples: "How has technology changed the way people communicate?", "Do you think it's important to travel abroad? Why?", "Describe a time when you had to work as part of a team."
+- Encourage the student to give 3–5 sentence answers. Follow up with "Why do you think that?" or "Can you give an example?"`;
+}
+
 export interface GeminiChatTurn {
   role: "user" | "assistant";
   content: string;
@@ -340,6 +375,7 @@ export async function getExaminerReply(
   topic?: string,
   dayId?: string,
   phase?: string,
+  level?: string,
 ): Promise<ExaminerReply> {
   const contents = history.map((turn) => ({
     role: turn.role === "assistant" ? "model" : "user",
@@ -353,8 +389,8 @@ export async function getExaminerReply(
     : isGermanMode
       ? GERMAN_TUTOR_SYSTEM_INSTRUCTION
       : topic
-        ? IELTS_EXAMINER_SYSTEM_INSTRUCTION + buildTopicInstruction(topic)
-        : IELTS_EXAMINER_SYSTEM_INSTRUCTION;
+        ? IELTS_EXAMINER_SYSTEM_INSTRUCTION + buildTopicInstruction(topic) + buildLevelInstruction(level)
+        : IELTS_EXAMINER_SYSTEM_INSTRUCTION + buildLevelInstruction(level);
 
   let lastErr: unknown;
 

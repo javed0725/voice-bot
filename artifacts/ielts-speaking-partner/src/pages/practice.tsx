@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AlertCircle, RefreshCw, TrendingUp, ArrowRight, Check } from 'lucide-react';
-import { useIeltsConversation, type ConversationMode, type AppMode } from '@/hooks/use-ielts-conversation';
+import { useIeltsConversation, type ConversationMode, type AppMode, type IeltsLevel } from '@/hooks/use-ielts-conversation';
 import { MicButton } from '@/components/mic-button';
 import { Transcript } from '@/components/transcript';
 import { MockTimer } from '@/components/mock-timer';
@@ -17,6 +17,7 @@ export function PracticeSession() {
     hasSpeechSupport,
     mode,
     appMode,
+    level,
     mockStage,
     currentCueCard,
     timer,
@@ -33,6 +34,7 @@ export function PracticeSession() {
   const [selectedAppMode, setSelectedAppMode] = useState<AppMode>('ielts');
   const [selectedMode, setSelectedMode] = useState<ConversationMode>('practice');
   const [selectedTopicId, setSelectedTopicId] = useState<string>('general');
+  const [selectedLevel, setSelectedLevel] = useState<IeltsLevel>('intermediate');
   const [showProgress, setShowProgress] = useState(false);
   const [germanView, setGermanView] = useState<'hidden' | 'roadmap'>('hidden');
 
@@ -121,7 +123,35 @@ export function PracticeSession() {
               </p>
 
               {selectedMode === 'practice' && (
-                <div className="text-left space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <div className="text-left space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-500">
+
+                  {/* Level selector */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-[#5A6C7D] uppercase tracking-wide">Select Level</p>
+                    <div className="flex gap-2">
+                      {([
+                        { id: 'beginner',     emoji: '🌱', label: 'Beginner',     sub: 'Simple & short',    active: 'bg-green-500 text-white border-green-500',  inactive: 'bg-green-50 text-green-700 border-green-200' },
+                        { id: 'intermediate', emoji: '📚', label: 'Intermediate', sub: 'Standard IELTS',    active: 'bg-amber-500 text-white border-amber-500',  inactive: 'bg-amber-50 text-amber-700 border-amber-200' },
+                        { id: 'advanced',     emoji: '🎯', label: 'Advanced',     sub: 'Part 3 Abstract',   active: 'bg-purple-600 text-white border-purple-600', inactive: 'bg-purple-50 text-purple-700 border-purple-200' },
+                      ] as const).map((lvl) => (
+                        <button
+                          key={lvl.id}
+                          onClick={() => setSelectedLevel(lvl.id)}
+                          className={cn(
+                            'flex-1 flex flex-col items-center gap-0.5 rounded-xl border-2 px-2 py-2.5 transition-all duration-200',
+                            selectedLevel === lvl.id ? lvl.active + ' shadow-md' : lvl.inactive
+                          )}
+                        >
+                          <span className="text-base leading-none">{lvl.emoji}</span>
+                          <span className="text-xs font-bold leading-tight">{lvl.label}</span>
+                          <span className={cn('text-[10px] leading-tight', selectedLevel === lvl.id ? 'opacity-80' : 'opacity-60')}>{lvl.sub}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Topic selector */}
+                  <div className="space-y-2">
                   <p className="text-xs font-semibold text-[#5A6C7D] uppercase tracking-wide">Choose a topic</p>
                   <div className="grid grid-cols-2 gap-2">
                     {FREE_PRACTICE_TOPICS.map((topic) => {
@@ -144,6 +174,7 @@ export function PracticeSession() {
                       );
                     })}
                   </div>
+                  </div>{/* end topic selector */}
                 </div>
               )}
             </div>
@@ -176,7 +207,7 @@ export function PracticeSession() {
             <button
               onClick={isGermanSelected
                 ? () => setGermanView('roadmap')
-                : () => startPractice(selectedMode, selectedTopicId, selectedAppMode)
+                : () => startPractice(selectedMode, selectedTopicId, selectedAppMode, selectedLevel)
               }
               className={cn(
                 'w-full py-4 px-8 rounded-full text-white text-lg font-semibold hover:-translate-y-1 hover:shadow-xl transition-all duration-300',
@@ -213,9 +244,17 @@ export function PracticeSession() {
                 {mockStage === 'part3' && 'Mock Test · Part 3'}
               </span>
             )}
+            {appMode !== 'german' && mode === 'practice' && (
+              <span className={cn(
+                'text-[11px] font-semibold uppercase tracking-wider',
+                level === 'beginner' ? 'text-green-500' : level === 'advanced' ? 'text-purple-500' : 'text-amber-500'
+              )}>
+                {level === 'beginner' ? '🌱 Beginner' : level === 'advanced' ? '🎯 Advanced' : '📚 Intermediate'}
+              </span>
+            )}
             {appMode === 'german' && (
               <span className="text-[11px] font-semibold text-[#3A6BC4] uppercase tracking-wider">
-                Deutsch · Beginner
+                Deutsch · A1→B2
               </span>
             )}
           </div>
