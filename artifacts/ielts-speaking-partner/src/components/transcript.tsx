@@ -90,7 +90,7 @@ export function Transcript({ messages, isThinking, onSendText, showFallbackInput
                     <div className="text-xs font-semibold text-[#E86A4C] uppercase tracking-wider mb-1.5">
                       🇩🇪 New German Words
                     </div>
-                    {msg.vocabularyUpgrades!.map((v, i) => (
+                    {msg.vocabularyUpgrades!.map((v: { original: string; upgrade: string }, i: number) => (
                       <div key={i} className="text-sm text-gray-700">
                         <span className="font-medium">{v.original}</span>
                         <span className="text-gray-400 mx-1.5">→</span>

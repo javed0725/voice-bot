@@ -1,0 +1,23 @@
+Let's completely revamp the "German Tutor Mode" into a structured, gamified course map from Beginner to Upper-Intermediate (CEFR Levels: A1, A2, B1, B2). 
+
+Please implement the following updates in parallel across the UI and backend:
+
+1. Course Architecture & Database:
+   - Create a local state or leverage IndexedDB to track user progress.
+   - Define a structure of Levels (A1, A2, B1, B2). Each level contains a list of Days (e.g., Day 1, Day 2, Day 3...).
+   - Implement a strict lock/unlock logic: All levels and days are locked by default, EXCEPT Day 1 of A1. Day N+1 only unlocks when Day N's test is passed.
+
+2. Frontend UI Update:
+   - Replace the simple toggle with a visually engaging "Course Roadmap" view when German Mode is active.
+   - Render the days as interactive circles/nodes labeled "Day 1", "Day 2" (or "1", "2", "3").
+   - Distinctly style the nodes based on state: Completed (Green/Check), Active/Unlocked (Clickable), and Locked (Greyed out with a lock icon).
+
+3. Daily Task & Dynamic Gemini Curriculum:
+   - When the user clicks an unlocked Day node, open a structured session split into two parts:
+     * Study Part: Gemini acts as a tutor instructing specific daily topics tailored to that level. Curriculum framework per level:
+       - A1 & A2 (Beginner): Basic vocabulary, Nominativ, Akkusativ, Dativ articles, simple sentence structures, and greetings.
+       - B1 & B2 (Intermediate): Complex sentence making (Nebensätze, Wechselpräpositionen), expressing arguments, and advanced situational speaking.
+     * Test Part: After the teaching segment, Gemini transitions into an evaluator: "Now, let's start today's test." It asks 3-5 level-appropriate speaking questions.
+   - Gemini must evaluate the user's audio/text responses. If the user performs satisfactorily, the backend/state triggers a success condition to unlock the next Day node.
+
+Make sure the JSON response payloads between frontend and backend cleanly handle the current phase (Learning vs. Testing) and the pass/fail result. Once this structural gamified path is built, commit and push to the GitHub main branch.

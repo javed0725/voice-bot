@@ -5,6 +5,7 @@ import { MicButton } from '@/components/mic-button';
 import { Transcript } from '@/components/transcript';
 import { MockTimer } from '@/components/mock-timer';
 import { ProgressDashboard } from '@/components/progress-dashboard';
+import { GermanRoadmap } from '@/pages/german-roadmap';
 import { FREE_PRACTICE_TOPICS } from '@/lib/free-practice-topics';
 import { cn } from '@/lib/utils';
 
@@ -33,6 +34,12 @@ export function PracticeSession() {
   const [selectedMode, setSelectedMode] = useState<ConversationMode>('practice');
   const [selectedTopicId, setSelectedTopicId] = useState<string>('general');
   const [showProgress, setShowProgress] = useState(false);
+  const [germanView, setGermanView] = useState<'hidden' | 'roadmap'>('hidden');
+
+  // German Course Map — completely separate from the IELTS session state machine
+  if (germanView === 'roadmap') {
+    return <GermanRoadmap onBack={() => setGermanView('hidden')} />;
+  }
 
   if (state === 'gate') {
     const isGermanSelected = selectedAppMode === 'german';
@@ -142,34 +149,41 @@ export function PracticeSession() {
             </div>
           )}
 
-          {/* German-only: brief feature bullets */}
+          {/* German-only: structured course overview */}
           {isGermanSelected && (
-            <div className="text-left bg-blue-50 border border-blue-100 rounded-2xl p-4 space-y-2 animate-in fade-in duration-300">
-              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">What you'll practice</p>
-              <ul className="text-sm text-[#2A3B4C] space-y-1">
-                {['Greetings & introductions', 'Numbers & colours', 'Days, months & weather', 'Food, shopping & directions', 'Gentle grammar corrections + translations'].map(item => (
-                  <li key={item} className="flex items-center gap-2">
-                    <Check size={13} className="text-blue-500 shrink-0" />
-                    {item}
-                  </li>
+            <div className="text-left bg-blue-50 border border-blue-100 rounded-2xl p-4 space-y-3 animate-in fade-in duration-300">
+              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Structured Course · A1 → B2</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { level: 'A1', label: 'Beginner', color: '#22C55E' },
+                  { level: 'A2', label: 'Elementary', color: '#3B82F6' },
+                  { level: 'B1', label: 'Intermediate', color: '#F59E0B' },
+                  { level: 'B2', label: 'Upper-Intermediate', color: '#8B5CF6' },
+                ].map(l => (
+                  <div key={l.level} className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 border border-white shadow-sm">
+                    <div className="w-6 h-6 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ backgroundColor: l.color }}>
+                      {l.level}
+                    </div>
+                    <span className="text-xs text-[#2A3B4C] font-medium leading-tight">{l.label}</span>
+                  </div>
                 ))}
-              </ul>
+              </div>
+              <p className="text-xs text-blue-500">5 days per level · each day has a lesson + test · unlock as you pass</p>
             </div>
           )}
 
           <div className="pt-2">
             <button
-              onClick={() => startPractice(
-                isGermanSelected ? 'practice' : selectedMode,
-                isGermanSelected ? undefined : selectedTopicId,
-                selectedAppMode,
-              )}
+              onClick={isGermanSelected
+                ? () => setGermanView('roadmap')
+                : () => startPractice(selectedMode, selectedTopicId, selectedAppMode)
+              }
               className={cn(
                 'w-full py-4 px-8 rounded-full text-white text-lg font-semibold hover:-translate-y-1 hover:shadow-xl transition-all duration-300',
                 isGermanSelected ? 'bg-[#3A6BC4]' : 'bg-[#2A3B4C]'
               )}
             >
-              {isGermanSelected ? 'Start German Lesson' : 'Start Practice Session'}
+              {isGermanSelected ? 'Open Course Map' : 'Start Practice Session'}
             </button>
             <p className="mt-4 text-sm text-gray-400">Requires microphone access</p>
           </div>

@@ -66,6 +66,107 @@ You MUST respond with ONLY a single JSON object using this field mapping:
 - "bandScores": set ALL four values to 0 — scoring is not used in German Tutor Mode
 - "vocabularyUpgrades": 1-2 German words introduced this turn — "original" = English word, "upgrade" = German word/phrase`;
 
+// ── German Day Curriculum (compact copy for the serverless function) ────────
+const GERMAN_DAY_DATA = {
+  'A1-1': { level: 'A1', dayNum: 1, topic: 'Greetings & Introductions',       keyPoints: 'Hallo, Guten Morgen, Guten Tag, Tschüss; Ich heiße…; Wie heißt du?; Woher kommst du? / Ich komme aus…; Wie geht es dir? / Gut, danke!' },
+  'A1-2': { level: 'A1', dayNum: 2, topic: 'Numbers 1–20 & Basic Questions',  keyPoints: 'eins bis zwanzig; Wie alt bist du? / Ich bin X Jahre alt; Was ist das? / Das ist…; Wie viel kostet das?' },
+  'A1-3': { level: 'A1', dayNum: 3, topic: 'Colors & Everyday Objects',        keyPoints: 'rot, blau, grün, gelb, schwarz, weiß, orange; Articles + nouns: der Tisch, die Lampe, das Buch; Das ist ein/eine…; Welche Farbe hat…?' },
+  'A1-4': { level: 'A1', dayNum: 4, topic: 'Days, Months & Time',              keyPoints: 'Montag–Sonntag; Januar–Dezember; Wie spät ist es? / Es ist … Uhr; heute, morgen, gestern' },
+  'A1-5': { level: 'A1', dayNum: 5, topic: 'Family Members & Possessives',     keyPoints: 'die Mutter, der Vater, die Schwester, der Bruder, die Großeltern; mein/meine, dein/deine; Das ist meine Mutter.; Ich habe einen Bruder.' },
+  'A2-1': { level: 'A2', dayNum: 1, topic: 'Nominativ Articles',               keyPoints: 'der (m), die (f), das (n), die (pl); ein, eine, ein; kein/keine; subject identification in sentences' },
+  'A2-2': { level: 'A2', dayNum: 2, topic: 'Akkusativ — Direct Objects',       keyPoints: 'den (m), die (f), das (n); verbs: haben, sehen, kaufen, essen; Ich kaufe den Apfel.; Hast du einen Hund?' },
+  'A2-3': { level: 'A2', dayNum: 3, topic: 'Dativ — Prepositions',             keyPoints: 'dem (m/n), der (f), den+n (pl); mit, bei, nach, von, zu, aus, seit; Ich fahre mit dem Bus.; Ich helfe meiner Mutter.' },
+  'A2-4': { level: 'A2', dayNum: 4, topic: 'Modal Verbs',                      keyPoints: 'können, müssen, wollen, dürfen, sollen, möchten; modal conjugated + infinitive at end; Ich muss arbeiten.; Darf ich hier sitzen?' },
+  'A2-5': { level: 'A2', dayNum: 5, topic: 'Perfekt — Conversational Past',    keyPoints: 'haben + past participle; sein for movement/change; ge-+stem+t regulars; irregulars: gehen→gegangen, sehen→gesehen, trinken→getrunken' },
+  'B1-1': { level: 'B1', dayNum: 1, topic: 'Nebensätze — Subordinate Clauses', keyPoints: 'weil, dass, wenn, obwohl, bevor, nachdem → verb to end; Ich bleibe zu Hause, weil ich krank bin.; Wenn ich Zeit habe, gehe ich spazieren.' },
+  'B1-2': { level: 'B1', dayNum: 2, topic: 'Wechselpräpositionen',             keyPoints: 'an, auf, in, neben, über, unter, vor, hinter, zwischen; Dativ for Wo? / Akkusativ for Wohin?; liegen/legen, sitzen/setzen pairs' },
+  'B1-3': { level: 'B1', dayNum: 3, topic: 'Reflexive Verbs',                  keyPoints: 'mich, dich, sich, uns, euch; sich freuen, sich waschen, sich erinnern, sich vorstellen; Ich freue mich auf den Urlaub.' },
+  'B1-4': { level: 'B1', dayNum: 4, topic: 'Konjunktiv II — Conditional',      keyPoints: 'würde + infinitive; wäre, hätte, könnte; Wenn ich reich wäre, würde ich reisen.; Das wäre toll!' },
+  'B1-5': { level: 'B1', dayNum: 5, topic: 'Expressing Opinions & Arguments',  keyPoints: 'Meiner Meinung nach…; Ich denke, dass…; Einerseits … andererseits…; Das stimmt, aber…; Ich bin anderer Meinung.' },
+  'B2-1': { level: 'B2', dayNum: 1, topic: 'Passiv — Passive Voice',           keyPoints: 'werden + past participle; Passiv with modal: Das muss gemacht werden.; Zustandspassiv with sein; formal/impersonal use' },
+  'B2-2': { level: 'B2', dayNum: 2, topic: 'Relativsätze — Relative Clauses',  keyPoints: 'der, die, das, die; gender+number agrees with antecedent; case by role; Das Buch, das ich lese, ist spannend.; Der Mann, dem ich half, ist nett.' },
+  'B2-3': { level: 'B2', dayNum: 3, topic: 'Advanced Prepositions & Phrases',  keyPoints: 'wegen, trotz, während, statt (genitive); warten auf, sich freuen über, denken an; Pronominaladverbien: darauf, darüber; jedoch, daher, folglich' },
+  'B2-4': { level: 'B2', dayNum: 4, topic: 'Formal Language & Written German', keyPoints: 'Sie vs du register; email: Sehr geehrte/r…, Mit freundlichen Grüßen; Nominalization; im Hinblick auf, bezüglich' },
+  'B2-5': { level: 'B2', dayNum: 5, topic: 'Debate & Complex Argumentation',   keyPoints: 'These → Begründung → Beispiel → Schluss; Zwar…, aber…; Auch wenn…, trotzdem…; topics: Umwelt, Digitalisierung, Globalisierung' },
+};
+
+const IS_BEGINNER = (level) => level === 'A1' || level === 'A2';
+
+function buildGermanDaySystemInstruction(dayId, phase) {
+  const day = GERMAN_DAY_DATA[dayId];
+  if (!day) return GERMAN_TUTOR_SYSTEM_INSTRUCTION;
+
+  if (phase === 'test') {
+    return `You are evaluating a student on Day ${day.dayNum} of CEFR Level ${day.level}: "${day.topic}".
+
+Test protocol:
+- Ask exactly 3 questions, one per turn. Wait for each answer before asking the next.
+- Questions must directly test today's topic: ${day.topic}.
+- ${IS_BEGINNER(day.level)
+    ? 'Appropriate question types: "How do you say X in German?", "What is the German word for Y?", "Complete this sentence: …"'
+    : 'Appropriate question types: Construct a sentence using the target grammar, express an opinion, demonstrate the grammatical structure.'}
+- After the student has answered all 3 questions, evaluate their overall performance.
+- Set testResult to "pass" if they answered at least 2 of 3 adequately; otherwise "fail".
+- Always include a warm, encouraging closing remark regardless of the result.
+
+JSON rules:
+- transitionToTest: ALWAYS false in the test phase.
+- testResult: "pending" while questions are still ongoing; "pass" or "fail" only after evaluating all 3 answers.
+- bandScores: all 0.
+- vocabularyUpgrades: empty array [] unless you naturally introduce a word.
+
+You MUST respond with ONLY this JSON object (no markdown, no extra text):
+{"reply":"string","correction":"string","bandUpgrade":"string","bandScores":{"fluency":0,"lexicalResource":0,"grammaticalRange":0,"pronunciation":0,"overall":0},"vocabularyUpgrades":[],"transitionToTest":false,"testResult":"pending"}`;
+  }
+
+  // study phase
+  return `You are a patient, encouraging German language tutor. Today is Day ${day.dayNum} of CEFR Level ${day.level}: "${day.topic}".
+
+Today's key content:
+${day.keyPoints}
+
+Lesson flow:
+1. Welcome the student warmly and introduce today's topic (1 short turn).
+2. Teach 2 key concepts one by one with a German example + English translation. After each, ask the student to try using the word or structure.
+3. After approximately 3 student exchanges (once you've covered the core content), set transitionToTest to true to signal readiness for the test.
+
+Rules:
+- Keep replies to 1–3 short sentences. Replies are read aloud, so brevity is essential.
+- Always show German + English side-by-side: e.g. "Hallo! (Hello!) Kannst du das wiederholen?"
+- Use encouragement: "Sehr gut!", "Wunderbar!", "Gut gemacht!"
+- bandScores: all 0.
+- testResult: ALWAYS "pending" during the study phase.
+- transitionToTest: false until you have finished teaching the core content, then true.
+- vocabularyUpgrades: list 1–2 German words introduced this turn.
+
+You MUST respond with ONLY this JSON object (no markdown, no extra text):
+{"reply":"string","correction":"string","bandUpgrade":"string","bandScores":{"fluency":0,"lexicalResource":0,"grammaticalRange":0,"pronunciation":0,"overall":0},"vocabularyUpgrades":[{"original":"English","upgrade":"Deutsch"}],"transitionToTest":false,"testResult":"pending"}`;
+}
+
+const GERMAN_DAY_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    reply: { type: "STRING" },
+    correction: { type: "STRING" },
+    bandUpgrade: { type: "STRING" },
+    bandScores: {
+      type: "OBJECT",
+      properties: {
+        fluency: { type: "NUMBER" }, lexicalResource: { type: "NUMBER" },
+        grammaticalRange: { type: "NUMBER" }, pronunciation: { type: "NUMBER" }, overall: { type: "NUMBER" },
+      },
+      required: ["fluency", "lexicalResource", "grammaticalRange", "pronunciation", "overall"],
+    },
+    vocabularyUpgrades: {
+      type: "ARRAY",
+      items: { type: "OBJECT", properties: { original: { type: "STRING" }, upgrade: { type: "STRING" } }, required: ["original", "upgrade"] },
+    },
+    transitionToTest: { type: "BOOLEAN" },
+    testResult: { type: "STRING", enum: ["pending", "pass", "fail"] },
+  },
+  required: ["reply", "correction", "bandUpgrade", "bandScores", "vocabularyUpgrades", "transitionToTest", "testResult"],
+};
+
 function buildTopicInstruction(topic: string): string {
   return `\n\nTopic focus rules (STRICT):
 - The student selected "${topic}" for this session. Every question and follow-up MUST stay within this topic.
@@ -109,24 +210,31 @@ const FALLBACK = {
   fluency: 6, lexicalResource: 6, grammaticalRange: 6, pronunciation: 6, overall: 6,
 };
 
-function safeParseReply(text: string) {
+function safeParseReply(text: string, isGermanDay = false) {
+  const base = (p: any, rawText: string) => ({
+    reply: typeof p?.reply === "string" ? p.reply : rawText.trim(),
+    correction: typeof p?.correction === "string" ? p.correction : "",
+    bandUpgrade: typeof p?.bandUpgrade === "string" ? p.bandUpgrade : "",
+    bandScores: p?.bandScores ?? FALLBACK,
+    vocabularyUpgrades: Array.isArray(p?.vocabularyUpgrades) ? p.vocabularyUpgrades : [],
+  });
+
   try {
     const p = JSON.parse(text.trim());
-    return {
-      reply: typeof p.reply === "string" ? p.reply : text.trim(),
-      correction: typeof p.correction === "string" ? p.correction : "",
-      bandUpgrade: typeof p.bandUpgrade === "string" ? p.bandUpgrade : "",
-      bandScores: p.bandScores ?? FALLBACK,
-      vocabularyUpgrades: Array.isArray(p.vocabularyUpgrades) ? p.vocabularyUpgrades : [],
-    };
+    const result: any = base(p, text);
+    if (isGermanDay) {
+      result.transitionToTest = p.transitionToTest === true;
+      // "pending" from the enum means null (not yet evaluated)
+      result.testResult = (p.testResult === "pass" || p.testResult === "fail") ? p.testResult : null;
+    }
+    return result;
   } catch {
-    return {
-      reply: text.trim(),
-      correction: "",
-      bandUpgrade: "",
-      bandScores: FALLBACK,
-      vocabularyUpgrades: [],
-    };
+    const result: any = base(null, text);
+    if (isGermanDay) {
+      result.transitionToTest = false;
+      result.testResult = null;
+    }
+    return result;
   }
 }
 
@@ -142,9 +250,11 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  const { messages, topic } = req.body as {
+  const { messages, topic, dayId, phase } = req.body as {
     messages: Array<{ role: string; content: string }>;
     topic?: string;
+    dayId?: string;
+    phase?: string;
   };
 
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -152,19 +262,23 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  console.log(`[chat] messages=${messages.length} topic=${topic ?? "none"}`);
+  const isGermanDayMode = topic === '__german_day__' && !!dayId;
+  const isGermanTutorMode = topic === '__german_tutor__';
+
+  console.log(`[chat] messages=${messages.length} topic=${topic ?? "none"} dayId=${dayId ?? "-"} phase=${phase ?? "-"}`);
 
   const contents = messages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
   }));
 
-  const isGermanMode = topic === '__german_tutor__';
-  const systemInstruction = isGermanMode
-    ? GERMAN_TUTOR_SYSTEM_INSTRUCTION
-    : topic
-      ? IELTS_EXAMINER_SYSTEM_INSTRUCTION + buildTopicInstruction(topic)
-      : IELTS_EXAMINER_SYSTEM_INSTRUCTION;
+  const systemInstruction = isGermanDayMode
+    ? buildGermanDaySystemInstruction(dayId, phase || "study")
+    : isGermanTutorMode
+      ? GERMAN_TUTOR_SYSTEM_INSTRUCTION
+      : topic
+        ? IELTS_EXAMINER_SYSTEM_INSTRUCTION + buildTopicInstruction(topic)
+        : IELTS_EXAMINER_SYSTEM_INSTRUCTION;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -183,7 +297,7 @@ export default async function handler(req: any, res: any) {
           maxOutputTokens: 1024,
           temperature: 0.7,
           responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
+          responseSchema: isGermanDayMode ? GERMAN_DAY_RESPONSE_SCHEMA : RESPONSE_SCHEMA,
           thinkingConfig: { thinkingBudget: 0 },
         },
       }),
@@ -208,7 +322,7 @@ export default async function handler(req: any, res: any) {
     }
 
     console.log(`[chat] success, reply length=${text.length}`);
-    res.json(safeParseReply(text));
+    res.json(safeParseReply(text, isGermanDayMode));
   } catch (err: any) {
     clearTimeout(timer);
     if (err?.name === "AbortError") {
