@@ -29,7 +29,11 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  const { audio, mimeType: rawMimeType } = req.body as { audio: string; mimeType: string };
+  const { audio, mimeType: rawMimeType, language } = req.body as {
+    audio: string;
+    mimeType: string;
+    language?: string; // e.g. "de" for German, "en" for English (default)
+  };
   if (!audio || !rawMimeType) {
     res.status(400).json({ error: "audio and mimeType are required" });
     return;
@@ -44,10 +48,23 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
+  // Build a language-aware transcription prompt
+  const lang = (language ?? "en").toLowerCase();
+  const langLabel =
+    lang === "de" ? "German" :
+    lang === "fr" ? "French" :
+    lang === "es" ? "Spanish" :
+    "spoken";                      // fallback: auto-detect whatever is spoken
+
+  const transcribePrompt =
+    `Transcribe the ${langLabel} speech in this audio clip exactly as heard. ` +
+    `Return ONLY the transcribed words — no punctuation changes, no commentary, no quotation marks. ` +
+    `If no speech is audible, return an empty string.`;
+
   // Estimate payload size for logging
   const estimatedBytes = Math.round((audio.length * 3) / 4);
   console.log(
-    `[transcribe] rawMime=${rawMimeType} → mime=${mimeType} payloadBytes≈${estimatedBytes}`
+    `[transcribe] rawMime=${rawMimeType} → mime=${mimeType} lang=${lang} payloadBytes≈${estimatedBytes}`
   );
 
   const controller = new AbortController();
@@ -70,7 +87,7 @@ export default async function handler(req: any, res: any) {
                 },
               },
               {
-                text: "Transcribe the spoken English in this audio clip exactly as heard. Return ONLY the transcribed words — no punctuation changes, no commentary, no quotation marks. If no speech is audible, return an empty string.",
+                text: transcribePrompt,
               },
             ],
           },
@@ -108,10 +125,23 @@ export default async function handler(req: any, res: any) {
   } catch (err: any) {
     clearTimeout(timer);
     if (err?.name === "AbortError") {
-      console.error("[transcribe] Gemini fetch timed out after", FETCH_TIMEOUT_MS, "ms");
+      console.error(
+        `[transcribe] Gemini fetch timed out after ${FETCH_TIMEOUT_MS}ms` +
+        ` (lang=${lang} mime=${mimeType} bytes≈${estimatedBytes})`
+      );
       res.status(504).json({ error: "Gemini API timed out" });
     } else {
-      console.error("[transcribe] Unexpected error:", err);
+      console.error(
+        "[transcribe] Unexpected error:",
+        {
+          name: err?.name,
+          message: err?.message,
+          stack: err?.stack,
+          lang,
+          mimeType,
+          estimatedBytes,
+        }
+      );
       res.status(500).json({ error: "Failed to transcribe audio" });
     }
   }

@@ -139,10 +139,28 @@ export function useGermanSession(day: GermanDay) {
   // ── Transcribe ───────────────────────────────────────────────────────────
 
   const transcribeAudio = useCallback(async (blob: Blob): Promise<string> => {
-    const fd = new FormData();
-    fd.append('audio', blob, 'audio.webm');
-    const res = await fetch(`${BASE()}/api/transcribe`, { method: 'POST', body: fd });
-    if (!res.ok) throw new Error('Transcription failed');
+    // Convert blob to base64 so the JSON API handler can read it correctly
+    // (FormData with raw Blob is not what the Vercel handler expects).
+    const arrayBuffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    const base64 = btoa(binary);
+
+    const rawMime = blob.type || 'audio/webm';
+    // Strip codec params: "audio/webm;codecs=opus" → "audio/webm"
+    const mimeType = rawMime.split(';')[0].trim();
+
+    const res = await fetch(`${BASE()}/api/transcribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audio: base64, mimeType, language: 'de' }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '(no body)');
+      console.error('[german-transcribe] HTTP', res.status, errText);
+      throw new Error(`Transcription failed (${res.status})`);
+    }
     const data = await res.json() as { transcript?: string };
     return data.transcript ?? '';
   }, []);
